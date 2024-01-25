@@ -3153,10 +3153,6 @@ def test_value_specialization_overflow(value: int, overflow: bool, device) -> No
 @pytest.mark.parametrize("is_lhs_constexpr", [False, True])
 @pytest.mark.parametrize("is_rhs_constexpr", [True, False])
 def test_bin_op_constexpr(op, is_lhs_constexpr, is_rhs_constexpr, device):
-    if is_hip():
-        if (is_rhs_constexpr, is_lhs_constexpr, op) in [(False, False, "<<"), (False, False, ">>"),
-                                                        (False, True, "<<")]:
-            pytest.skip(f"test_bin_op_constexpr[{is_lhs_constexpr}-{is_rhs_constexpr}-{op}] is not supported in HIP")
 
     @triton.jit
     def kernel(Z, X, Y):
