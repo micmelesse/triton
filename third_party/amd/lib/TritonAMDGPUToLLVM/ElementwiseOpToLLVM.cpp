@@ -2463,6 +2463,33 @@ struct SelectOpConversion
         adaptor.getAttributes().getValue())};
   }
 };
+
+struct ArithShLIOpConversion
+    : ElementwiseOpConversionBase<mlir::arith::ShLIOp, ArithShLIOpConversion> {
+  using Base =
+      ElementwiseOpConversionBase<mlir::arith::ShLIOp, ArithShLIOpConversion>;
+  using Base::Base;
+  using Adaptor = typename Base::OpAdaptor;
+
+  SmallVector<Value> createDestOps(mlir::arith::ShLIOp op, OpAdaptor adaptor,
+                                   ConversionPatternRewriter &rewriter,
+                                   Type elemTy, MultipleOperandsRange operands,
+                                   Location loc) const {
+    std::array<Value, 3> llvmOperands;
+    if (operands[0].size() == 2) {
+      // Case of scalar condition with tensor operands.
+      assert(op.getCondition().getType().isInteger(1));
+      llvmOperands = {adaptor.getCondition(), operands[0][0], operands[0][1]};
+    } else {
+      llvmOperands = {operands[0][0], operands[0][1], operands[0][2]};
+    }
+    return {rewriter.create<LLVM::ShlOp>(
+        loc, llvmOperands[1].getType(), llvmOperands,
+        adaptor.getAttributes().getValue())};
+  }
+};
+
+
 }
 
 namespace AMD{
@@ -2486,7 +2513,6 @@ void populateElementwiseOpToLLVMPatterns(
   POPULATE_BINARY_OP(arith::AndIOp, LLVM::AndOp)   // &
   POPULATE_BINARY_OP(arith::OrIOp, LLVM::OrOp)     // |
   POPULATE_BINARY_OP(arith::XOrIOp, LLVM::XOrOp)   // ^
-  POPULATE_BINARY_OP(arith::ShLIOp, LLVM::ShlOp)   // <<
   POPULATE_BINARY_OP(arith::ShRSIOp, LLVM::AShrOp) // >>
   POPULATE_BINARY_OP(arith::ShRUIOp, LLVM::LShrOp) // >>
   POPULATE_BINARY_OP(arith::MinimumFOp,
@@ -2533,6 +2559,7 @@ void populateElementwiseOpToLLVMPatterns(
   patterns.add<FAddOpConversion>(typeConverter, axisInfoAnalysis, benefit);
   patterns.add<FMulOpConversion>(typeConverter, axisInfoAnalysis, benefit);
 
+  patterns.add<ArithShLIOpConversion>(typeConverter, axisInfoAnalysis, benefit);  // <<
   patterns.add<SelectOpConversion>(typeConverter, axisInfoAnalysis, benefit);
   patterns.add<ExtFOpConversion>(typeConverter, axisInfoAnalysis, benefit);
   patterns.add<TruncFOpConversion>(typeConverter, axisInfoAnalysis, benefit);
