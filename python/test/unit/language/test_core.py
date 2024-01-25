@@ -3173,10 +3173,18 @@ def test_bin_op_constexpr(op, is_lhs_constexpr, is_rhs_constexpr, device):
         y = numpy_random((1, ), dtype_str="float32")
     kernel = patch_kernel(kernel, {'GENERATE_TEST_HERE': f"{x_str} {op} {y_str}"})
     z = np.array(eval(f"{x_str} {op} {y_str}"))
+    
+    print("x:", x)
+    print("y:", y)
+    print(f"{x_str} {op} {y_str}")
+    print("z:", z)
     x_tri = to_triton(x, device=device)
     y_tri = to_triton(y, device=device)
     z_tri = to_triton(np.empty((1, ), dtype=z.dtype), device=device)
     kernel[(1, )](z_tri, x_tri, y_tri)
+    print("x:", to_numpy(x_tri))
+    print("y:", to_numpy(y_tri))
+    print("z:", to_numpy(z_tri))
     np.testing.assert_allclose(z, to_numpy(z_tri))
 
 
