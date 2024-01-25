@@ -3176,15 +3176,15 @@ def test_bin_op_constexpr(op, is_lhs_constexpr, is_rhs_constexpr, device):
     
     print("x:", x)
     print("y:", y)
-    print(f"{x_str} {op} {y_str}")
     print("z:", z)
+    print(f"{x_str} {op} {y_str}")
     x_tri = to_triton(x, device=device)
     y_tri = to_triton(y, device=device)
     z_tri = to_triton(np.empty((1, ), dtype=z.dtype), device=device)
     kernel[(1, )](z_tri, x_tri, y_tri)
-    print("x:", to_numpy(x_tri))
-    print("y:", to_numpy(y_tri))
-    print("z:", to_numpy(z_tri))
+    print("x_tri:", to_numpy(x_tri))
+    print("y_tri:", to_numpy(y_tri))
+    print("z_tri:", to_numpy(z_tri))
     np.testing.assert_allclose(z, to_numpy(z_tri))
 
 

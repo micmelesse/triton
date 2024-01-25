@@ -2475,22 +2475,13 @@ struct ArithShLIOpConversion
                                    ConversionPatternRewriter &rewriter,
                                    Type elemTy, MultipleOperandsRange operands,
                                    Location loc) const {
-    std::array<Value, 3> llvmOperands;
-    if (operands[0].size() == 2) {
-      // Case of scalar condition with tensor operands.
-      assert(op.getCondition().getType().isInteger(1));
-      llvmOperands = {adaptor.getCondition(), operands[0][0], operands[0][1]};
-    } else {
-      llvmOperands = {operands[0][0], operands[0][1], operands[0][2]};
-    }
-    return {rewriter.create<LLVM::ShlOp>(
-        loc, llvmOperands[1].getType(), llvmOperands,
-        adaptor.getAttributes().getValue())};
+    std::array<Value, 2> llvmOperands = {operands[0][0], operands[0][1]};
+    return {rewriter.create<LLVM::ShlOp>(loc, llvmOperands[0].getType(),
+                                         llvmOperands,
+                                         adaptor.getAttributes().getValue())};
   }
 };
-
-
-}
+} // namespace
 
 namespace AMD{
 void populateElementwiseOpToLLVMPatterns(
