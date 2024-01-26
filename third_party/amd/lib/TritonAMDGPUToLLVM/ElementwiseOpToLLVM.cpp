@@ -2475,7 +2475,18 @@ struct ArithShLIOpConversion
                                    ConversionPatternRewriter &rewriter,
                                    Type elemTy, MultipleOperandsRange operands,
                                    Location loc) const {
-    std::array<Value, 2> llvmOperands = {operands[0][0], operands[0][1]};
+
+    auto lhs = operands[0][0];
+    auto rhs = operands[0][1];
+
+    // cast to int 64. AMDGPUs have undefined behavior when bitshifting beyond bit width
+    auto lhs_int64 = rewriter.create<LLVM::SExtOp>(
+        loc, i64_ty, lhs, adaptor.getAttributes().getValue());
+
+    auto rhs_int64 = rewriter.create<LLVM::SExtOp>(
+        loc, i64_ty, rhs, adaptor.getAttributes().getValue());
+
+    std::array<Value, 2> llvmOperands = {lhs_int64, rhs_int64};
     return {rewriter.create<LLVM::ShlOp>(loc, llvmOperands[0].getType(),
                                          llvmOperands,
                                          adaptor.getAttributes().getValue())};
