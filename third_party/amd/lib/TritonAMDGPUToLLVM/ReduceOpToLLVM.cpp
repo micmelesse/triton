@@ -47,13 +47,33 @@ public:
     unsigned srcElems = getTotalElemsPerThread(types[0]);
     SmallVector<SmallVector<Value>> srcValues(srcElems);
     for (unsigned i = 0; i < op.getNumOperands(); ++i) {
+#if 0
       auto values =
           getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
+#else
+      SmallVector<Value> values;
+      Value llvmStruct = operands[i];
+      assert(bool(llvmStruct) && "can not unpack null values");
+      if (llvmStruct.getType().isIntOrIndexOrFloat() ||
+          llvmStruct.getType().isa<triton::PointerType>() ||
+          llvmStruct.getType().isa<LLVM::LLVMPointerType>()) {
+        values = {llvmStruct};
+      } else {
+        ArrayRef<Type> types =
+            llvmStruct.getType().cast<LLVM::LLVMStructType>().getBody();
+        values = SmallVector<Value>(types.size());
+        for (unsigned i = 0; i < types.size(); ++i) {
+          Type type = types[i];
+          values[i] = extract_val(type, llvmStruct, i);
+        }
+      }
+#endif
 
       assert(values.size() == srcValues.size());
       for (unsigned j = 0; j < srcValues.size(); ++j) {
-        auto promote_values = values[j];
-        srcValues[j].push_back(promote_values);
+        // auto promote_values = sext(i32_ty, values[j]);
+        // auto promote_values = zext(i32_ty, values[j]);
+        srcValues[j].push_back(values[j]);
       }
     }
 #endif
