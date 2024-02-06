@@ -39,7 +39,25 @@ public:
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
 
-    auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
+#if 0
+    // auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
+#else
+    auto types = op.getInputTypes();
+    auto operands = adaptor.getOperands();
+    unsigned srcElems = getTotalElemsPerThread(types[0]);
+    SmallVector<SmallVector<Value>> srcValues(srcElems);
+    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
+      auto values =
+          getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
+
+      assert(values.size() == srcValues.size());
+      for (unsigned j = 0; j < srcValues.size(); ++j) {
+        auto promote_values = values[j];
+        srcValues[j].push_back(promote_values);
+      }
+    }
+#endif
+
     std::map<SmallVector<unsigned>, SmallVector<Value>> accs;
     std::map<SmallVector<unsigned>, SmallVector<Value>> indices;
     // First reduce all the values along axis within each thread.
