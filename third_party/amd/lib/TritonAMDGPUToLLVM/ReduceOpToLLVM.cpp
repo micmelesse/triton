@@ -66,7 +66,7 @@ public:
           Type type = types[i];
           Value val = extract_val(type, llvmStruct, i);
 #if 0
-           values[i] = val;
+          values[i] = val;
 #else
           values[i] = sext(i32_ty, val);
 #endif
