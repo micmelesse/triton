@@ -64,7 +64,12 @@ public:
         values = SmallVector<Value>(types.size());
         for (unsigned i = 0; i < types.size(); ++i) {
           Type type = types[i];
-          values[i] = extract_val(type, llvmStruct, i);
+          Value val = extract_val(type, llvmStruct, i);
+#if 0
+           values[i] = val;
+#else
+          values[i] = sext(i32_ty, val);
+#endif
         }
       }
 #endif
