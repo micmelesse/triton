@@ -48,8 +48,8 @@ public:
     SmallVector<SmallVector<Value>> srcValues(srcElems);
     for (unsigned i = 0; i < op.getNumOperands(); ++i) {
 #if 0
-      auto values =
-          getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
+      // auto values =
+      //     getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
 #else
       SmallVector<Value> values;
       Value llvmStruct = operands[i];
@@ -66,7 +66,7 @@ public:
           Type type = types[i];
           Value val = extract_val(type, llvmStruct, i);
 #if 0
-          values[i] = val;
+          // values[i] = val;
 #else
           values[i] = sext(i32_ty, val);
 #endif
@@ -76,8 +76,6 @@ public:
 
       assert(values.size() == srcValues.size());
       for (unsigned j = 0; j < srcValues.size(); ++j) {
-        // auto promote_values = sext(i32_ty, values[j]);
-        // auto promote_values = zext(i32_ty, values[j]);
         srcValues[j].push_back(values[j]);
       }
     }
