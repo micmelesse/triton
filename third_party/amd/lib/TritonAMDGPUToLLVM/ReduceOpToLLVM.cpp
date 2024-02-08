@@ -39,8 +39,8 @@ public:
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
 
-#if 0
-    // auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
+#if 1
+    auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
 #else
     auto types = op.getInputTypes();
     auto operands = adaptor.getOperands();
@@ -48,8 +48,7 @@ public:
     SmallVector<SmallVector<Value>> srcValues(srcElems);
     for (unsigned i = 0; i < op.getNumOperands(); ++i) {
 #if 0
-      // auto values =
-      //     getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
+    auto values = getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
 #else
       SmallVector<Value> values;
       Value llvmStruct = operands[i];
@@ -65,9 +64,14 @@ public:
         for (unsigned i = 0; i < types.size(); ++i) {
           Type type = types[i];
           Value val = extract_val(type, llvmStruct, i);
-#if 0
-          // values[i] = val;
-#else
+          
+#if 1
+          values[i] = val;
+#else     
+          std::cout << "dump:" << std::endl;
+          op.dump();
+          type.dump();
+          val.dump();
           values[i] = sext(i32_ty, val);
 #endif
         }
@@ -77,6 +81,28 @@ public:
       assert(values.size() == srcValues.size());
       for (unsigned j = 0; j < srcValues.size(); ++j) {
         srcValues[j].push_back(values[j]);
+      }
+    }
+#endif
+
+#if 0
+    // NOTE: doesnot work srcValue is being used. Try casting before any of this
+    // python: /home/runner/work/triton/triton/llvm-project/mlir/include/mlir/IR/UseDefLists.h:198: mlir::IRObjectWithUseList<mlir::OpOperand>::~IRObjectWithUseList() [OperandType = mlir::OpOperand]: Assertion `use_empty() && "Cannot destroy a value that still has uses!"' failed.
+    std::cout << "" << std::endl;
+    for (unsigned i = 0; i < srcValues.size(); ++i) {
+      for (unsigned j = 0; j < srcValues[i].size(); ++j) {
+        Value val = srcValues[i][j];
+        val.dump();
+        Type valType = val.getType();
+        valType.dump();
+
+        unsigned bitwidth = valType.getIntOrFloatBitWidth();
+        std::cout << "bitwidth:" << bitwidth << std::endl;
+
+        // promote types below int32
+        if (bitwidth < 32) {
+          srcValues[i][j] = sext(i32_ty, val);
+        }
       }
     }
 #endif
