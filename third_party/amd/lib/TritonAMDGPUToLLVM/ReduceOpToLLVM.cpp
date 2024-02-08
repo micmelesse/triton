@@ -38,6 +38,31 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
+    std::cout << "op:" << std::endl;
+    op.dump();
+
+    std::cout << " " << std::endl;
+    auto types = op.getInputTypes();
+    auto operands = adaptor.getOperands();
+    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
+      // type info
+      std::cout << "Type:" << std::endl;
+      types[i].dump();
+      std::cout << "TotalElemsPerThread: " << getTotalElemsPerThread(types[i])
+                << std::endl;
+
+      // Operand info
+      std::cout << "Operand:" << std::endl;
+      operands[i].dump();
+
+      // Value info
+      auto values =
+          getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
+      for (unsigned j = 0; j < values.size(); ++j) {
+        std::cout << "Value:" << std::endl;
+        values[j].dump();
+      }
+    }
 
 #if 1
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
