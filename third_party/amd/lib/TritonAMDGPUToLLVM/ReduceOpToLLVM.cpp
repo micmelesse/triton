@@ -38,6 +38,8 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
+
+#if 0
     std::cout << "op:" << std::endl;
     op.dump();
 
@@ -63,79 +65,53 @@ public:
         values[j].dump();
       }
     }
-
-#if 1
+#endif 
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
-#else
-    auto types = op.getInputTypes();
-    auto operands = adaptor.getOperands();
-    unsigned srcElems = getTotalElemsPerThread(types[0]);
-    SmallVector<SmallVector<Value>> srcValues(srcElems);
-    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-#if 0
-    auto values = getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
-#else
-      SmallVector<Value> values;
-      Value llvmStruct = operands[i];
-      assert(bool(llvmStruct) && "can not unpack null values");
-      if (llvmStruct.getType().isIntOrIndexOrFloat() ||
-          llvmStruct.getType().isa<triton::PointerType>() ||
-          llvmStruct.getType().isa<LLVM::LLVMPointerType>()) {
-        values = {llvmStruct};
-      } else {
-        ArrayRef<Type> types =
-            llvmStruct.getType().cast<LLVM::LLVMStructType>().getBody();
-        values = SmallVector<Value>(types.size());
-        for (unsigned i = 0; i < types.size(); ++i) {
-          Type type = types[i];
-          Value val = extract_val(type, llvmStruct, i);
-          
+
+
 #if 1
-          values[i] = val;
-#else     
-          std::cout << "dump:" << std::endl;
-          op.dump();
-          type.dump();
-          val.dump();
-          values[i] = sext(i32_ty, val);
-#endif
-        }
-      }
-#endif
-
-      assert(values.size() == srcValues.size());
-      for (unsigned j = 0; j < srcValues.size(); ++j) {
-        srcValues[j].push_back(values[j]);
-      }
-    }
-#endif
-
-#if 0
     // NOTE: doesnot work srcValue is being used. Try casting before any of this
-    // python: /home/runner/work/triton/triton/llvm-project/mlir/include/mlir/IR/UseDefLists.h:198: mlir::IRObjectWithUseList<mlir::OpOperand>::~IRObjectWithUseList() [OperandType = mlir::OpOperand]: Assertion `use_empty() && "Cannot destroy a value that still has uses!"' failed.
+    // python:
+    // /home/runner/work/triton/triton/llvm-project/mlir/include/mlir/IR/UseDefLists.h:198:
+    // mlir::IRObjectWithUseList<mlir::OpOperand>::~IRObjectWithUseList()
+    // [OperandType = mlir::OpOperand]: Assertion `use_empty() && "Cannot
+    // destroy a value that still has uses!"' failed.
     std::cout << "" << std::endl;
+    llvm::SmallVector<llvm::SmallVector<mlir::Value>>
+        promotedSrcValues;
+    promotedSrcValues.reserve(srcValues.size()); 
     for (unsigned i = 0; i < srcValues.size(); ++i) {
+      llvm::SmallVector<mlir::Value> innerVector; // Create a temporary inner vector
+      innerVector.reserve(srcValues[i].size());
       for (unsigned j = 0; j < srcValues[i].size(); ++j) {
+        std::cout << "val:" << std::endl;
         Value val = srcValues[i][j];
         val.dump();
+
+        std::cout << "valType:" << std::endl;
         Type valType = val.getType();
         valType.dump();
 
-        unsigned bitwidth = valType.getIntOrFloatBitWidth();
-        std::cout << "bitwidth:" << bitwidth << std::endl;
-
         // promote types below int32
+        unsigned bitwidth = valType.getIntOrFloatBitWidth();
         if (bitwidth < 32) {
-          srcValues[i][j] = sext(i32_ty, val);
+          std::cout << "bitwidth: " << bitwidth << std::endl;
+          innerVector.push_back(
+              rewriter.create<LLVM::SExtOp>(loc, i32_ty, val));
+        } else {
+          innerVector.push_back(val);
         }
       }
+
+      // Add the populated innerVector to promotedSrcValues
+      promotedSrcValues.push_back(std::move(innerVector));
     }
 #endif
 
     std::map<SmallVector<unsigned>, SmallVector<Value>> accs;
     std::map<SmallVector<unsigned>, SmallVector<Value>> indices;
     // First reduce all the values along axis within each thread.
-    reduceWithinThreads(helper, srcValues, accs, indices, rewriter);
+    reduceWithinThreads(helper, promotedSrcValues, accs, indices, rewriter);
 
     // Then reduce across threads within a warp.
     reduceWithinWarps(helper, accs, rewriter);
