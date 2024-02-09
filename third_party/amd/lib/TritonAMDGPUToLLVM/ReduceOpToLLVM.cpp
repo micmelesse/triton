@@ -38,6 +38,10 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
+    auto typeConverter = getTypeConverter();
+
+    auto module = op->getParentOfType<ModuleOp>();
+    module.dump();
 
 #if 0
     std::cout << "op:" << std::endl;
@@ -66,10 +70,22 @@ public:
       }
     }
 #endif 
+
+    // Layout is srcValues[operand][elem]
+#if 0
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
+#else
 
 
-#if 1
+    // smallvector convert type
+    Type llvmResultStructTy = typeConverter->convertType(valueTy);
+    Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
+                                        rewriter, llvmResultStructTy);
+
+                              #endif
+
+
+#if 0
     // NOTE: doesnot work srcValue is being used. Try casting before any of this
     // python:
     // /home/runner/work/triton/triton/llvm-project/mlir/include/mlir/IR/UseDefLists.h:198:

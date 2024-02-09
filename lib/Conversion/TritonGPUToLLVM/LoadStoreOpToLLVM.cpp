@@ -337,6 +337,8 @@ struct LoadOpConversion : public ConvertOpToLLVMPattern<triton::LoadOp>,
       }
     } // end vec
 
+
+    // STUDY:
     Type llvmResultStructTy = typeConverter->convertType(valueTy);
     Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
                                         rewriter, llvmResultStructTy);
