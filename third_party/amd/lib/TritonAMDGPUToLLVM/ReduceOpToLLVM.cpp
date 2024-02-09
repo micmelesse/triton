@@ -65,13 +65,15 @@ public:
         for (unsigned i = 0; i < types.size(); ++i) {
           Type type = types[i];
           Value extracted_value = extract_val(type, llvmStruct, i);
+          std::cout << "extracted_value: " << std::endl;
+          extracted_value.dump();
           unsigned bitwidth = extracted_value.getType().getIntOrFloatBitWidth();
           if (bitwidth < 32) {
             std::cout << "bitwidth: " << bitwidth << std::endl;
             //  auto typeConverter = getTypeConverter();
-            values[i] = sext(i32_ty, extracted_value);
+            values.push_back(sext(i32_ty, extracted_value));
           } else {
-            values[i] = extracted_value;
+            values.push_back(extracted_value);
           }
         }
       }
