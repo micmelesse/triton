@@ -58,3 +58,4 @@ docs/getting-started/tutorials
 log*
 scripts
 third_party/amd/lib/TritonAMDGPUToLLVM/ReduceOpToLLVM_rocm_fork.cpp
+core

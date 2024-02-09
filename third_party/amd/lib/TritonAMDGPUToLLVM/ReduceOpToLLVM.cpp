@@ -38,96 +38,55 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
-    auto typeConverter = getTypeConverter();
 
-    auto module = op->getParentOfType<ModuleOp>();
-    module.dump();
-
-#if 0
-    std::cout << "op:" << std::endl;
-    op.dump();
-
-    std::cout << " " << std::endl;
-    auto types = op.getInputTypes();
-    auto operands = adaptor.getOperands();
-    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-      // type info
-      std::cout << "Type:" << std::endl;
-      types[i].dump();
-      std::cout << "TotalElemsPerThread: " << getTotalElemsPerThread(types[i])
-                << std::endl;
-
-      // Operand info
-      std::cout << "Operand:" << std::endl;
-      operands[i].dump();
-
-      // Value info
-      auto values =
-          getTypeConverter()->unpackLLElements(loc, operands[i], rewriter);
-      for (unsigned j = 0; j < values.size(); ++j) {
-        std::cout << "Value:" << std::endl;
-        values[j].dump();
-      }
-    }
-#endif 
-
-    // Layout is srcValues[operand][elem]
 #if 0
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
 #else
+    // auto module = op->getParentOfType<ModuleOp>();
+    // module.dump();
 
+    auto types = op.getInputTypes();
+    auto operands = adaptor.getOperands();
+    unsigned srcElems = getTotalElemsPerThread(types[0]);
+    SmallVector<SmallVector<Value>> srcValues(srcElems);
+    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
+      // unpack the operands
+      SmallVector<Value> values;
 
-    // smallvector convert type
-    Type llvmResultStructTy = typeConverter->convertType(valueTy);
-    Value resultStruct = packLLElements(loc, typeConverter, loadedVals,
-                                        rewriter, llvmResultStructTy);
-
-                              #endif
-
-
-#if 0
-    // NOTE: doesnot work srcValue is being used. Try casting before any of this
-    // python:
-    // /home/runner/work/triton/triton/llvm-project/mlir/include/mlir/IR/UseDefLists.h:198:
-    // mlir::IRObjectWithUseList<mlir::OpOperand>::~IRObjectWithUseList()
-    // [OperandType = mlir::OpOperand]: Assertion `use_empty() && "Cannot
-    // destroy a value that still has uses!"' failed.
-    std::cout << "" << std::endl;
-    llvm::SmallVector<llvm::SmallVector<mlir::Value>>
-        promotedSrcValues;
-    promotedSrcValues.reserve(srcValues.size()); 
-    for (unsigned i = 0; i < srcValues.size(); ++i) {
-      llvm::SmallVector<mlir::Value> innerVector; // Create a temporary inner vector
-      innerVector.reserve(srcValues[i].size());
-      for (unsigned j = 0; j < srcValues[i].size(); ++j) {
-        std::cout << "val:" << std::endl;
-        Value val = srcValues[i][j];
-        val.dump();
-
-        std::cout << "valType:" << std::endl;
-        Type valType = val.getType();
-        valType.dump();
-
-        // promote types below int32
-        unsigned bitwidth = valType.getIntOrFloatBitWidth();
-        if (bitwidth < 32) {
-          std::cout << "bitwidth: " << bitwidth << std::endl;
-          innerVector.push_back(
-              rewriter.create<LLVM::SExtOp>(loc, i32_ty, val));
-        } else {
-          innerVector.push_back(val);
+      auto llvmStruct = operands[i];
+      if (llvmStruct.getType().isIntOrIndexOrFloat() ||
+          llvmStruct.getType().isa<triton::PointerType>() ||
+          llvmStruct.getType().isa<LLVM::LLVMPointerType>()) {
+        values = {llvmStruct};
+      } else {
+        ArrayRef<Type> types =
+            llvmStruct.getType().cast<LLVM::LLVMStructType>().getBody();
+        values.reserve(types.size());
+        for (unsigned i = 0; i < types.size(); ++i) {
+          Type type = types[i];
+          Value extracted_value = extract_val(type, llvmStruct, i);
+          unsigned bitwidth = extracted_value.getType().getIntOrFloatBitWidth();
+          if (bitwidth < 32) {
+            std::cout << "bitwidth: " << bitwidth << std::endl;
+            //  auto typeConverter = getTypeConverter();
+            values[i] = sext(i32_ty, extracted_value);
+          } else {
+            values[i] = extracted_value;
+          }
         }
       }
 
-      // Add the populated innerVector to promotedSrcValues
-      promotedSrcValues.push_back(std::move(innerVector));
+      assert(values.size() == srcValues.size());
+      for (unsigned j = 0; j < srcValues.size(); ++j) {
+        srcValues[j].push_back(values[j]);
+      }
     }
 #endif
 
     std::map<SmallVector<unsigned>, SmallVector<Value>> accs;
     std::map<SmallVector<unsigned>, SmallVector<Value>> indices;
     // First reduce all the values along axis within each thread.
-    reduceWithinThreads(helper, promotedSrcValues, accs, indices, rewriter);
+    reduceWithinThreads(helper, srcValues, accs, indices, rewriter);
 
     // Then reduce across threads within a warp.
     reduceWithinWarps(helper, accs, rewriter);
