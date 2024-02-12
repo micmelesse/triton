@@ -38,8 +38,21 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
+    auto operands = adaptor.getOperands(); // (tensor<128xi16>, tensor<128xi32>) 
+    SmallVector<mlir::Value> results(op.getNumOperands()); // (i16, i32)
+    for (int i = 0; i < results.size(); i++) {
+      mlir::Value operand =  operands[i]; // tensor<128xi16> or tensor<128xi32>
+      SmallVector<Value> values = getTypeConverter()->unpackLLElements(loc, operand, rewriter);
+      operand.dump();
+      // operand = rewriter.create<mlir::arith::ExtSIOp>(
+      //     loc, targetStructType, operand);
+      results[i] = values[0]; // the expected result is a scalar 
+    }
 
-#if 0
+    rewriter.replaceOp(op, results);
+    return success();
+
+#if 1
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
 #else
     // auto module = op->getParentOfType<ModuleOp>();
@@ -53,7 +66,21 @@ public:
       // unpack the operands
       SmallVector<Value> values;
 
+#if 0
       auto llvmStruct = operands[i];
+#else
+      LLVM::StructType *targetStructType = LLVM::StructType::get(ctx, {i32_ty});
+      auto llvmStruct = operands[i];
+
+      auto llvmStruct = rewriter.create<mlir::arith::SExtOp>(
+          loc, targetStructType, operands[i]);
+
+      llvmStruct.dump();
+      llvmStruct.getType().dump();
+#endif
+
+    
+
       if (llvmStruct.getType().isIntOrIndexOrFloat() ||
           llvmStruct.getType().isa<triton::PointerType>() ||
           llvmStruct.getType().isa<LLVM::LLVMPointerType>()) {
@@ -62,19 +89,24 @@ public:
         ArrayRef<Type> types =
             llvmStruct.getType().cast<LLVM::LLVMStructType>().getBody();
         values.reserve(types.size());
+        // extract values
         for (unsigned i = 0; i < types.size(); ++i) {
           Type type = types[i];
           Value extracted_value = extract_val(type, llvmStruct, i);
-          std::cout << "extracted_value: " << std::endl;
-          extracted_value.dump();
-          unsigned bitwidth = extracted_value.getType().getIntOrFloatBitWidth();
-          if (bitwidth < 32) {
-            std::cout << "bitwidth: " << bitwidth << std::endl;
-            //  auto typeConverter = getTypeConverter();
-            values.push_back(sext(i32_ty, extracted_value));
-          } else {
-            values.push_back(extracted_value);
-          }
+          values.push_back(extracted_value);
+        }
+
+        // Sign Extend extracted values
+        for (unsigned j = 0; j < values.size(); ++j) {
+          values[j] =
+              rewriter.create<mlir::arith::SExtOp>(loc, i32_ty, values[j]);
+        }
+
+        // Create a new instance of the LLVM struct
+        llvmStruct = rewriter.create<LLVM::UndefOp>(loc, targetStructType);
+        for (unsigned j = 0; j < values.size(); ++j) {
+          llvmStruct = rewriter.create<LLVM::InsertValueOp>(loc, llvmStruct,
+                                                            values[j], j);
         }
       }
 
