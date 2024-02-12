@@ -38,85 +38,37 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
-    auto operands = adaptor.getOperands(); // (tensor<128xi16>, tensor<128xi32>) 
-    SmallVector<mlir::Value> results(op.getNumOperands()); // (i16, i32)
-    for (int i = 0; i < results.size(); i++) {
-      mlir::Value operand =  operands[i]; // tensor<128xi16> or tensor<128xi32>
-      SmallVector<Value> values = getTypeConverter()->unpackLLElements(loc, operand, rewriter);
-      operand.dump();
-      // operand = rewriter.create<mlir::arith::ExtSIOp>(
-      //     loc, targetStructType, operand);
-      results[i] = values[0]; // the expected result is a scalar 
-    }
-
-    rewriter.replaceOp(op, results);
-    return success();
-
-#if 1
-    auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
-#else
-    // auto module = op->getParentOfType<ModuleOp>();
-    // module.dump();
-
-    auto types = op.getInputTypes();
-    auto operands = adaptor.getOperands();
-    unsigned srcElems = getTotalElemsPerThread(types[0]);
-    SmallVector<SmallVector<Value>> srcValues(srcElems);
-    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-      // unpack the operands
-      SmallVector<Value> values;
-
-#if 0
-      auto llvmStruct = operands[i];
-#else
-      LLVM::StructType *targetStructType = LLVM::StructType::get(ctx, {i32_ty});
-      auto llvmStruct = operands[i];
-
-      auto llvmStruct = rewriter.create<mlir::arith::SExtOp>(
-          loc, targetStructType, operands[i]);
-
-      llvmStruct.dump();
-      llvmStruct.getType().dump();
-#endif
 
     
+    mlir::ValueRange operands = adaptor.getOperands(); // iterator over values of type (tensor<128xi16>, tensor<128xi32>) 
+    unsigned numOperands = op.getNumOperands(); // 2
+    llvm::SmallVector<mlir::RankedTensorType> types = op.getInputTypes(); // (tensor<128xi16>, tensor<128xi32>) 
+    llvm::SmallVector<mlir::Type> elemTypes = op.getElementTypes(); // i16, i32
 
-      if (llvmStruct.getType().isIntOrIndexOrFloat() ||
-          llvmStruct.getType().isa<triton::PointerType>() ||
-          llvmStruct.getType().isa<LLVM::LLVMPointerType>()) {
-        values = {llvmStruct};
-      } else {
-        ArrayRef<Type> types =
-            llvmStruct.getType().cast<LLVM::LLVMStructType>().getBody();
-        values.reserve(types.size());
-        // extract values
-        for (unsigned i = 0; i < types.size(); ++i) {
-          Type type = types[i];
-          Value extracted_value = extract_val(type, llvmStruct, i);
-          values.push_back(extracted_value);
-        }
 
-        // Sign Extend extracted values
-        for (unsigned j = 0; j < values.size(); ++j) {
-          values[j] =
-              rewriter.create<mlir::arith::SExtOp>(loc, i32_ty, values[j]);
-        }
+    // NOTE: just operate on operands[0] tensor<128xi16>
+    mlir::Value operand = operands[0]; // value of tensor<128xi16>
+    mlir::Type operand_type = operand.getType(); // tensor<128xi16>
 
-        // Create a new instance of the LLVM struct
-        llvmStruct = rewriter.create<LLVM::UndefOp>(loc, targetStructType);
-        for (unsigned j = 0; j < values.size(); ++j) {
-          llvmStruct = rewriter.create<LLVM::InsertValueOp>(loc, llvmStruct,
-                                                            values[j], j);
-        }
-      }
+    if (operand_type.isIntOrIndexOrFloat() ||
+        operand_type.isa<triton::PointerType>() ||
+        operand_type.isa<LLVM::LLVMPointerType>()) {
 
-      assert(values.size() == srcValues.size());
-      for (unsigned j = 0; j < srcValues.size(); ++j) {
-        srcValues[j].push_back(values[j]);
-      }
+    } else {
+      mlir::Type operand_element_type = elemTypes[0]; // i16
+      if (operand_element_type.isInteger(16)) {
+        SmallVector<mlir::Value> new_operands(numOperands); 
+
+
+        // NOTE: this is just to test the logic
+        new_operands[0] = operands[1]; // replace tensor<128xi16> with indices tensor<128xi32>
+
+        rewriter.replaceOpWithNewOp<triton::ReduceOp>(op, new_operands);
+        return success();
+      } 
     }
-#endif
 
+    auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
     std::map<SmallVector<unsigned>, SmallVector<Value>> accs;
     std::map<SmallVector<unsigned>, SmallVector<Value>> indices;
     // First reduce all the values along axis within each thread.
