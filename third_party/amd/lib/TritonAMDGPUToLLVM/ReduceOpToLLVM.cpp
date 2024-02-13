@@ -40,9 +40,11 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+    std::cout << "ReduceOpPromotionConversion"<< std::endl;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     mod.dump();
 
+#if 0
     mlir::ValueRange operands =
         adaptor.getOperands(); // iterator over values of type (tensor<128xi16>,
                                // tensor<128xi32>)
@@ -65,12 +67,37 @@ public:
     newReduceState.addOperands(newOperands);
     newReduceState.addTypes(newTypes);
     newReduceState.addAttributes(op->getAttrs());
-    newReduceState.addRegions(op->getRegions());
+    // newReduceState.addRegions(op->getRegions());
+    for (auto &region : op->getRegions()) {
+      newReduceState.addRegion(region);
+    }
     Operation *newReduce = rewriter.create(newReduceState);
 
-    rewriter.replaceOp(op, newReduce);
-    mod.dump();
+#else
+    auto opOperands = op->getOpOperands();
+    for (OpOperand &operand : opOperands) {
+      std::cout << "Op" << std::endl;
+      auto op_val = operand.get();
+      op_val.dump();
+    }
 
+    rewriter.modifyOpInPlace(op, [&]() {
+      opOperands[0].assign(opOperands[1].get());
+    });
+    
+
+    // auto newReduce = rewriter.create<triton::ReduceOp>(
+    //     op.getLoc(), adaptor.getOperands(), adaptor.getAxis());
+    // addNamedAttrs(newReduce, adaptor.getAttributes()); // might be adding tritongpu attrs which we might not need
+
+    // auto &newCombineOp = newReduce.getCombineOp();
+    // rewriter.cloneRegionBefore(op.getCombineOp(), newCombineOp,
+    //                            newCombineOp.end());
+    // rewriter.replaceOp(op, newReduce.getResult());
+#endif
+
+    std::cout << "ReduceOpPromotionConversion Result:"<< std::endl;
+    mod.dump();
     return success();
   }
 
@@ -92,6 +119,9 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
+  std::cout << "ReduceOpConversion"<< std::endl;
+  auto mod = op->getParentOfType<mlir::ModuleOp>();
+  mod.dump();
 #if 1
     ReduceOpHelper helper(op);
     assert(helper.isSupportedLayout() &&
@@ -279,6 +309,9 @@ public:
     // set output values
     loadReductionAndPackResult(helper, smemShape, smemBases, rewriter);
 
+
+    std::cout << "ReduceOpConversion Result:"<< std::endl;
+    mod.dump();
     return success();
   }
 
@@ -719,9 +752,9 @@ void populateReduceOpToLLVMPatterns(
     ConvertTritonGPUOpToLLVMPatternBase::IndexCacheInfo &indexCacheInfo,
     int computeCapability, PatternBenefit benefit) {
 
-  patterns.add<ReduceOpPromotionConversion(typeConverter, allocation, indexCacheInfo,
-                                   computeCapability, benefit);
+  patterns.add<ReduceOpPromotionConversion>(
+      typeConverter, allocation, indexCacheInfo, computeCapability, 2);
   patterns.add<ReduceOpConversion>(typeConverter, allocation, indexCacheInfo,
-                                   computeCapability, benefit);
+                                   computeCapability, 1);
 }
 }
