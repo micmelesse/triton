@@ -40,7 +40,14 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-#if 0
+#if
+    ReduceOpHelper helper(op);
+    assert(helper.isSupportedLayout() &&
+           "Unexpected srcLayout in ReduceOpConversion");
+    Location loc = op->getLoc();
+
+    auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
+#elif 0
     auto types = op.getInputTypes();
     auto operands = adaptor.getOperands();
     unsigned srcElems = getTotalElemsPerThread(types[0]);
@@ -143,6 +150,7 @@ public:
     llvm::SmallVector<mlir::RankedTensorType> types =
         op.getInputTypes(); // (tensor<128xi16>, tensor<128xi32>)
     llvm::SmallVector<mlir::Type> elemTypes = op.getElementTypes(); // i16, i32
+    unsigned axis = op.getAxis();
 
     // just use second arg which is tensor<128xi32>
     SmallVector<mlir::Value> newOperands(numOperands);
@@ -157,7 +165,7 @@ public:
     newReduceState.addTypes(newTypes);
     newReduceState.addAttributes(op->getAttrs());
     // Operation* newReduce = rewriter.create(newReduceState);
-    auto newReduce = rewriter.create<triton::ReduceOp>(newReduceState, newOperands, op->getAxis());
+    auto newReduce = rewriter.create<triton::ReduceOp>(newReduceState, newOperands, axis);
     addNamedAttrs(newReduce, adaptor.getAttributes());
 
     mod.dump();
@@ -177,13 +185,6 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = newReduce->getLoc();
-#else
-    ReduceOpHelper helper(op);
-    assert(helper.isSupportedLayout() &&
-           "Unexpected srcLayout in ReduceOpConversion");
-    Location loc = op->getLoc();
-
-    auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
 #endif
 
     std::map<SmallVector<unsigned>, SmallVector<Value>> accs;
