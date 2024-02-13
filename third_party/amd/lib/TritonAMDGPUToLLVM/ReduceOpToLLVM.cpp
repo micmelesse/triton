@@ -44,8 +44,10 @@ public:
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    mod.dump();
 
-    
+#if 1
     mlir::ValueRange operands = adaptor.getOperands(); // iterator over values of type (tensor<128xi16>, tensor<128xi32>) 
     unsigned numOperands = op.getNumOperands(); // 2
     llvm::SmallVector<mlir::RankedTensorType> types = op.getInputTypes(); // (tensor<128xi16>, tensor<128xi32>) 
@@ -57,51 +59,38 @@ public:
     mlir::Type operand_type = operand.getType(); // tensor<128xi16>
 
     if (isa<LLVM::LLVMStructType>(operand_type)) {
-      std::cout << "operand[0] is an LLVMStructType" << std::endl;
+      std::cout << "operand is an LLVMStructType" << std::endl;
       operand_type.dump();
       mlir::Type operand_element_type = elemTypes[0]; // i16
       if (operand_element_type.isInteger(16)) {
-        SmallVector<mlir::Value> new_operands(numOperands);
+        std::cout << "operand element type is i16" << std::endl;
 
-        // for (auto arg : operands) {
-        //   auto argTy = arg.getType().cast<RankedTensorType>();
-        //   auto retEltTy = argTy.getElementType();
-        //   if (inferReduceReturnShape(argTy, retEltTy, axis,
-        //   inferredReturnTypes)
-        //           .failed()) {
-        //     return failure();
-        //   }
-        // }
+        // just use second arg which is tensor<128xi32>
+        SmallVector<mlir::Value> newOperands(numOperands);
+        newOperands[0] = operands[1];
+        newOperands[1] = operands[1];
+        llvm::SmallVector<mlir::Type> newTypes(numOperands);
+        newTypes[0] = elemTypes[1];
+        newTypes[1] = elemTypes[1];
 
-        // mlir::Value new_val = operands[1].getType().cast<RankedTensorType>();
-        // SmallVector<Value> values =
-        //     getTypeConverter()->unpackLLElements(loc, operand, rewriter);
-        // auto new_val = getTypeConverter()->packLLElements(loc, values, rewriter, operands[1].getType());
+        // new state
+        OperationState newReduceState(op->getLoc(), op->getName());
+        newReduceState.addOperands(newOperands);
+        newReduceState.addTypes(newTypes);
+        newReduceState.addAttributes(op->getAttrs());
+        auto newReduce = rewriter.create(newReduceState);
+        rewriter.replaceOp(op, newReduce->getResults());
+        // rewriter.replaceOp(op, newReduce);
 
-        // NOTE: this is just to test the logic
-        auto val = operands[1];
-        new_operands[0] = val; // replace tensor<128xi16> with indices tensor<128xi32>
-        new_operands[1] = val; // keep old indices
-
-        auto newReduce = rewriter.create<triton::ReduceOp>(loc, new_operands, adaptor.getAxis());
-
-        rewriter.replaceOp(op, newReduce); // must be result
-        // rewriter.replaceOpWithNewOp<triton::ReduceOp>(op, operands, adaptor.getAxis());
-
-        // auto newReduce = rewriter.create<triton::ReduceOp>(
-        //     op.getLoc(), adaptor.getOperands(), adaptor.getAxis());
-        // addNamedAttrs(newReduce, adaptor.getAttributes());
-
-        // auto &newCombineOp = newReduce.getCombineOp();
-        // rewriter.cloneRegionBefore(op.getCombineOp(), newCombineOp,
-        //                            newCombineOp.end());
-        // rewriter.replaceOp(op, newReduce.getResult());
+        mod.dump();
+        // rewriter.replaceOpWithNewOp<triton::ReduceOp>(op, newReduceState);
         return success();
       }
     } else {
-      std::cout << "operand[0] is not an LLVMStructType" << std::endl;
+      std::cout << "operand is not an LLVMStructType" << std::endl;
       operand_type.dump();
     }
+#endif
 
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
     std::map<SmallVector<unsigned>, SmallVector<Value>> accs;
