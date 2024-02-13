@@ -81,13 +81,16 @@ public:
         for (Operation &op : block.getOperations()) {
           op.dump();
         }
+
+        std::cout << "block terminator op"  << std::endl;
+        Operation *reduceReturn = block.getTerminator();
+        reduceReturn->dump();
+        for (OpOperand &o : reduceReturn->getOpOperands()) {
+          o.get().dump();
+          o.get().setType(i32_ty);
+        }
       }
-
-      // print combineop Operands
     });
-
-    std::cout << "ReduceOpPromotionConversion Result:" << std::endl;
-    mod.dump();
     return success();
   }
 
