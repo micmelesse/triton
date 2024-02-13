@@ -40,63 +40,35 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    std::cout << "ReduceOpPromotionConversion"<< std::endl;
+    std::cout << "ReduceOpPromotionConversion" << std::endl;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     mod.dump();
 
-#if 0
-    mlir::ValueRange operands =
-        adaptor.getOperands(); // iterator over values of type (tensor<128xi16>,
-                               // tensor<128xi32>)
-    unsigned numOperands = op.getNumOperands(); // 2
-    llvm::SmallVector<mlir::RankedTensorType> types =
-        op.getInputTypes(); // (tensor<128xi16>, tensor<128xi32>)
-    llvm::SmallVector<mlir::Type> elemTypes = op.getElementTypes(); // i16, i32
-    unsigned axis = op.getAxis();
-
-    // just use second arg which is tensor<128xi32>
-    SmallVector<mlir::Value> newOperands(numOperands);
-    newOperands[0] = operands[1];
-    newOperands[1] = operands[1];
-    llvm::SmallVector<mlir::Type> newTypes(numOperands);
-    newTypes[0] = elemTypes[1];
-    newTypes[1] = elemTypes[1];
-
-    // new op state
-    OperationState newReduceState(op->getLoc(), op->getName());
-    newReduceState.addOperands(newOperands);
-    newReduceState.addTypes(newTypes);
-    newReduceState.addAttributes(op->getAttrs());
-    // newReduceState.addRegions(op->getRegions());
-    for (auto &region : op->getRegions()) {
-      newReduceState.addRegion(region);
-    }
-    Operation *newReduce = rewriter.create(newReduceState);
-
-#else
-    auto opOperands = op->getOpOperands();
-    for (OpOperand &operand : opOperands) {
-      std::cout << "Op" << std::endl;
-      auto op_val = operand.get();
-      op_val.dump();
-    }
-
     rewriter.modifyOpInPlace(op, [&]() {
-      opOperands[0].assign(opOperands[1].get());
+      auto opOperands = op->getOpOperands();
+      std::cout << "opOperands: " << std::endl;
+      for (OpOperand &o : opOperands) {
+        o.get().dump();
+      }
+
+      std::cout << "Operand 0" << std::endl;
+      OpOperand &operand = opOperands[0]; // (a ranked tensor of type i16)
+      auto val = operand.get();
+      auto type = val.getType();
+      val.dump();
+      type.dump();
+
+      // promote
+      auto tensorPromotedType =
+          type.cast<RankedTensorType>().cloneWith(std::nullopt, i32_ty);
+      auto promoted_val = rewriter.create<mlir::arith::ExtSIOp>(
+          op->getLoc(), tensorPromotedType, val);
+
+      // set Value
+      op.setOperand(operand.getOperandNumber(), promoted_val);
     });
-    
 
-    // auto newReduce = rewriter.create<triton::ReduceOp>(
-    //     op.getLoc(), adaptor.getOperands(), adaptor.getAxis());
-    // addNamedAttrs(newReduce, adaptor.getAttributes()); // might be adding tritongpu attrs which we might not need
-
-    // auto &newCombineOp = newReduce.getCombineOp();
-    // rewriter.cloneRegionBefore(op.getCombineOp(), newCombineOp,
-    //                            newCombineOp.end());
-    // rewriter.replaceOp(op, newReduce.getResult());
-#endif
-
-    std::cout << "ReduceOpPromotionConversion Result:"<< std::endl;
+    std::cout << "ReduceOpPromotionConversion Result:" << std::endl;
     mod.dump();
     return success();
   }
