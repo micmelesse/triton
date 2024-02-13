@@ -18,6 +18,12 @@ using ::AMD::TritonGPUToLLVMTypeConverter;
 using ::AMD::ConvertTritonGPUOpToLLVMPatternBase;
 using ::AMD::ConvertTritonGPUOpToLLVMPattern;
 
+
+static void addNamedAttrs(Operation *op, DictionaryAttr dictAttrs) {
+  for (const NamedAttribute attr : dictAttrs.getValue())
+    if (!op->hasAttr(attr.getName()))
+      op->setAttr(attr.getName(), attr.getValue());
+}
 namespace AMD{
 namespace {
 struct ReduceOpConversion
@@ -50,22 +56,51 @@ public:
     mlir::Value operand = operands[0]; // value of tensor<128xi16>
     mlir::Type operand_type = operand.getType(); // tensor<128xi16>
 
-    if (operand_type.isIntOrIndexOrFloat() ||
-        operand_type.isa<triton::PointerType>() ||
-        operand_type.isa<LLVM::LLVMPointerType>()) {
-
-    } else {
+    if (isa<LLVM::LLVMStructType>(operand_type)) {
+      std::cout << "operand[0] is an LLVMStructType" << std::endl;
+      operand_type.dump();
       mlir::Type operand_element_type = elemTypes[0]; // i16
       if (operand_element_type.isInteger(16)) {
-        SmallVector<mlir::Value> new_operands(numOperands); 
+        SmallVector<mlir::Value> new_operands(numOperands);
 
+        // for (auto arg : operands) {
+        //   auto argTy = arg.getType().cast<RankedTensorType>();
+        //   auto retEltTy = argTy.getElementType();
+        //   if (inferReduceReturnShape(argTy, retEltTy, axis,
+        //   inferredReturnTypes)
+        //           .failed()) {
+        //     return failure();
+        //   }
+        // }
+
+        // mlir::Value new_val = operands[1].getType().cast<RankedTensorType>();
+        // SmallVector<Value> values =
+        //     getTypeConverter()->unpackLLElements(loc, operand, rewriter);
+        // auto new_val = getTypeConverter()->packLLElements(loc, values, rewriter, operands[1].getType());
 
         // NOTE: this is just to test the logic
-        new_operands[0] = operands[1]; // replace tensor<128xi16> with indices tensor<128xi32>
+        auto val = operands[1];
+        new_operands[0] = val; // replace tensor<128xi16> with indices tensor<128xi32>
+        new_operands[1] = val; // keep old indices
 
-        rewriter.replaceOpWithNewOp<triton::ReduceOp>(op, new_operands);
+        auto newReduce = rewriter.create<triton::ReduceOp>(loc, new_operands, adaptor.getAxis());
+
+        rewriter.replaceOp(op, newReduce); // must be result
+        // rewriter.replaceOpWithNewOp<triton::ReduceOp>(op, operands, adaptor.getAxis());
+
+        // auto newReduce = rewriter.create<triton::ReduceOp>(
+        //     op.getLoc(), adaptor.getOperands(), adaptor.getAxis());
+        // addNamedAttrs(newReduce, adaptor.getAttributes());
+
+        // auto &newCombineOp = newReduce.getCombineOp();
+        // rewriter.cloneRegionBefore(op.getCombineOp(), newCombineOp,
+        //                            newCombineOp.end());
+        // rewriter.replaceOp(op, newReduce.getResult());
         return success();
-      } 
+      }
+    } else {
+      std::cout << "operand[0] is not an LLVMStructType" << std::endl;
+      operand_type.dump();
     }
 
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
