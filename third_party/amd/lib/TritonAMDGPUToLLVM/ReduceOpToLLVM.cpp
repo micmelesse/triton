@@ -51,17 +51,6 @@ public:
         o.get().dump();
       }
 
-      std::cout << "Regions: " << std::endl;
-      for (Region &region : op->getRegions()) {
-        std::cout << "region" << std::endl;
-        for (Block &block : region.getBlocks()) {
-          std::cout << "block" << std::endl;
-          for (Operation &op : block.getOperations()) {
-            op.dump();
-          }
-        }
-      }
-
       std::cout << "Operand 0" << std::endl;
       OpOperand &operand = opOperands[0]; // (a ranked tensor of type i16)
       auto val = operand.get();
@@ -81,9 +70,14 @@ public:
 
       // alter the combine block
       std::cout << "combineOp" << std::endl;
-      Region& combineOp = op.getCombineOp();
+      Region &combineOp = op.getCombineOp();
       for (Block &block : combineOp.getBlocks()) {
-        std::cout << "block" << std::endl;
+        std::cout << "block args" << std::endl;
+        for (auto arg : block.getArguments()) {
+          arg.dump();
+          arg.setType(i32_ty);
+        }
+        std::cout << "block ops" << std::endl;
         for (Operation &op : block.getOperations()) {
           op.dump();
         }
