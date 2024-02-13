@@ -26,6 +26,58 @@ static void addNamedAttrs(Operation *op, DictionaryAttr dictAttrs) {
 }
 namespace AMD{
 namespace {
+struct ReduceOpPromotionConversion
+    : public ConvertTritonGPUReduceScanToLLVMPattern<triton::ReduceOp> {
+public:
+  ReduceOpPromotionConversion(
+      TritonGPUToLLVMTypeConverter &typeConverter, ModuleAllocation &allocation,
+      ConvertTritonGPUOpToLLVMPatternBase::IndexCacheInfo &indexCacheInfo,
+      int computeCapability, PatternBenefit benefit)
+      : ConvertTritonGPUReduceScanToLLVMPattern<triton::ReduceOp>(
+            typeConverter, allocation, indexCacheInfo, benefit),
+        computeCapability(computeCapability) {}
+
+  LogicalResult
+  matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
+                  ConversionPatternRewriter &rewriter) const override {
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    mod.dump();
+
+    mlir::ValueRange operands =
+        adaptor.getOperands(); // iterator over values of type (tensor<128xi16>,
+                               // tensor<128xi32>)
+    unsigned numOperands = op.getNumOperands(); // 2
+    llvm::SmallVector<mlir::RankedTensorType> types =
+        op.getInputTypes(); // (tensor<128xi16>, tensor<128xi32>)
+    llvm::SmallVector<mlir::Type> elemTypes = op.getElementTypes(); // i16, i32
+    unsigned axis = op.getAxis();
+
+    // just use second arg which is tensor<128xi32>
+    SmallVector<mlir::Value> newOperands(numOperands);
+    newOperands[0] = operands[1];
+    newOperands[1] = operands[1];
+    llvm::SmallVector<mlir::Type> newTypes(numOperands);
+    newTypes[0] = elemTypes[1];
+    newTypes[1] = elemTypes[1];
+
+    // new op state
+    OperationState newReduceState(op->getLoc(), op->getName());
+    newReduceState.addOperands(newOperands);
+    newReduceState.addTypes(newTypes);
+    newReduceState.addAttributes(op->getAttrs());
+    newReduceState.addRegions(op->getRegions());
+    Operation *newReduce = rewriter.create(newReduceState);
+
+    rewriter.replaceOp(op, newReduce);
+    mod.dump();
+
+    return success();
+  }
+
+private:
+  int computeCapability;
+};
+
 struct ReduceOpConversion
     : public ConvertTritonGPUReduceScanToLLVMPattern<triton::ReduceOp> {
 public:
@@ -40,7 +92,7 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-#if
+#if 1
     ReduceOpHelper helper(op);
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
@@ -136,14 +188,10 @@ public:
       std::cout << "operand is not an LLVMStructType" << std::endl;
       operand_type.dump();
     }
-#elif 1
+#elif 0
     // dump input module state
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     mod.dump();
-
-    // for (auto &region : op->getRegions()) {
-    //   region.dump();
-    // }
 
     mlir::ValueRange operands = adaptor.getOperands(); // iterator over values of type (tensor<128xi16>, tensor<128xi32>)
     unsigned numOperands = op.getNumOperands(); // 2
@@ -160,20 +208,23 @@ public:
     newTypes[0] = elemTypes[1];
     newTypes[1] = elemTypes[1];
 
+    // new op state
     OperationState newReduceState(op->getLoc(), op->getName());
     newReduceState.addOperands(newOperands);
     newReduceState.addTypes(newTypes);
     newReduceState.addAttributes(op->getAttrs());
-    // Operation* newReduce = rewriter.create(newReduceState);
-    auto newReduce = rewriter.create<triton::ReduceOp>(newReduceState, newOperands, axis);
-    addNamedAttrs(newReduce, adaptor.getAttributes());
+    newReduceState.addRegions(op->getRegions());
+    Operation* newReduce = rewriter.create(newReduceState);
+    // auto newReduce = rewriter.create<triton::ReduceOp>(newReduceState, newOperands, axis);
+    // addNamedAttrs(newReduce, adaptor.getAttributes());
 
     mod.dump();
 
-    auto &newCombineOp = newReduce->getCombineOp();
-    rewriter.cloneRegionBefore(op.getCombineOp(), newCombineOp,
-                               newCombineOp.end());
-    rewriter.replaceOp(op, newReduce);
+    // reduce block
+    // auto &newCombineOp = newReduce->getCombineOp();
+    // rewriter.cloneRegionBefore(op.getCombineOp(), newCombineOp,
+    //                            newCombineOp.end());
+    // rewriter.replaceOp(op, newReduce);
 
     mod.dump();
     
@@ -206,11 +257,11 @@ public:
     auto smemShape = helper.getScratchConfig();
 
     SmallVector<Value> smemBases =
-        getSmemBases(newReduce, product<unsigned>(smemShape), rewriter);
+        getSmemBases(op, product<unsigned>(smemShape), rewriter);
 
     storeWarpReduceToSharedMemory(helper, accs, indices, smemBases, rewriter);
 
-    sync(rewriter, loc, newReduce);
+    sync(rewriter, loc, op);
 
     // The second round of shuffle reduction
     //   now the problem size: sizeInterWarps, s1, s2, .. , sn
@@ -223,12 +274,10 @@ public:
     // We could avoid this barrier in some of the layouts, however this is not
     // the general case.
     // TODO: optimize the barrier in case the layouts are accepted.
-    sync(rewriter, loc, newReduce);
+    sync(rewriter, loc, op);
 
     // set output values
     loadReductionAndPackResult(helper, smemShape, smemBases, rewriter);
-
-    mod.dump();
 
     return success();
   }
@@ -669,6 +718,9 @@ void populateReduceOpToLLVMPatterns(
     ModuleAllocation &allocation,
     ConvertTritonGPUOpToLLVMPatternBase::IndexCacheInfo &indexCacheInfo,
     int computeCapability, PatternBenefit benefit) {
+
+  patterns.add<ReduceOpPromotionConversion(typeConverter, allocation, indexCacheInfo,
+                                   computeCapability, benefit);
   patterns.add<ReduceOpConversion>(typeConverter, allocation, indexCacheInfo,
                                    computeCapability, benefit);
 }
