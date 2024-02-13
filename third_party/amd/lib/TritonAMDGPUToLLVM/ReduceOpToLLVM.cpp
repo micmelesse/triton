@@ -51,6 +51,17 @@ public:
         o.get().dump();
       }
 
+      std::cout << "Regions: " << std::endl;
+      for (Region &region : op->getRegions()) {
+        std::cout << "region" << std::endl;
+        for (Block &block : region.getBlocks()) {
+          std::cout << "block" << std::endl;
+          for (Operation &op : block.getOperations()) {
+            op.dump();
+          }
+        }
+      }
+
       std::cout << "Operand 0" << std::endl;
       OpOperand &operand = opOperands[0]; // (a ranked tensor of type i16)
       auto val = operand.get();
@@ -66,6 +77,19 @@ public:
 
       // set Value
       op.setOperand(operand.getOperandNumber(), promoted_val);
+
+
+      // alter the combine block
+      std::cout << "combineOp" << std::endl;
+      Region& combineOp = op.getCombineOp();
+      for (Block &block : combineOp.getBlocks()) {
+        std::cout << "block" << std::endl;
+        for (Operation &op : block.getOperations()) {
+          op.dump();
+        }
+      }
+
+      // print combineop Operands
     });
 
     std::cout << "ReduceOpPromotionConversion Result:" << std::endl;
