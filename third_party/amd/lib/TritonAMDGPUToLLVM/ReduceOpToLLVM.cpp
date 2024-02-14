@@ -44,53 +44,48 @@ public:
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     mod.dump();
 
-    rewriter.modifyOpInPlace(op, [&]() {
-      auto opOperands = op->getOpOperands();
-      std::cout << "opOperands: " << std::endl;
-      for (OpOperand &o : opOperands) {
-        o.get().dump();
+    auto opOperands = op->getOpOperands();
+    std::cout << "opOperands: " << std::endl;
+    // Promote operands and collect new operands
+    SmallVector<Value> promotedOperands;
+    for (OpOperand &operand : op->getOpOperands()) {
+      auto oldType = operand.get().getType().cast<RankedTensorType>();
+      auto newType = oldType.cloneWith(std::nullopt, i32_ty);
+      auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
+          op->getLoc(), newType, operand.get());
+      promotedOperands.push_back(promotedVal);
+    }
+
+    // alter the combine block
+    auto &oldCompineOP = op.getCombineOp();
+    for (Block &block : oldCompineOP.getBlocks()) {
+      for (auto arg : block.getArguments()) {
+        // arg.dump();
+        arg.setType(i32_ty);
       }
 
-      std::cout << "Operand 0" << std::endl;
-      OpOperand &operand = opOperands[0]; // (a ranked tensor of type i16)
-      auto val = operand.get();
-      auto type = val.getType();
-      val.dump();
-      type.dump();
+      // for (Operation &op : block.getOperations()) {
+      //   op.dump();
+      // }
 
-      // promote
-      auto tensorPromotedType =
-          type.cast<RankedTensorType>().cloneWith(std::nullopt, i32_ty);
-      auto promoted_val = rewriter.create<mlir::arith::ExtSIOp>(
-          op->getLoc(), tensorPromotedType, val);
-
-      // set Value
-      op.setOperand(operand.getOperandNumber(), promoted_val);
-
-
-      // alter the combine block
-      std::cout << "combineOp" << std::endl;
-      Region &combineOp = op.getCombineOp();
-      for (Block &block : combineOp.getBlocks()) {
-        std::cout << "block args" << std::endl;
-        for (auto arg : block.getArguments()) {
-          arg.dump();
-          arg.setType(i32_ty);
-        }
-        std::cout << "block ops" << std::endl;
-        for (Operation &op : block.getOperations()) {
-          op.dump();
-        }
-
-        std::cout << "block terminator op"  << std::endl;
-        Operation *reduceReturn = block.getTerminator();
-        reduceReturn->dump();
-        for (OpOperand &o : reduceReturn->getOpOperands()) {
-          o.get().dump();
-          o.get().setType(i32_ty);
-        }
+      Operation *reduceReturn = block.getTerminator();
+      // reduceReturn->dump();
+      for (OpOperand &o : reduceReturn->getOpOperands()) {
+        o.get().setType(i32_ty);
       }
-    });
+    }
+
+    // new op
+    auto newReduce = rewriter.create<triton::ReduceOp>(op.getLoc(), promotedOperands, adaptor.getAxis());
+    addNamedAttrs(newReduce, adaptor.getAttributes());
+
+    // attach new block
+    auto &newCombineOp = newReduce.getCombineOp();
+    rewriter.cloneRegionBefore(oldCompineOP, newCombineOp, newCombineOp.end());
+
+    // replace old op with new op
+    rewriter.replaceOp(op, newReduce);
+    // rewriter.eraseOp(op);
     return success();
   }
 
