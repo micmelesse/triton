@@ -45,7 +45,7 @@ public:
     mod.dump();
 
     auto opOperands = op->getOpOperands();
-    std::cout << "opOperands: " << std::endl;
+    std::cout << "promote operands: " << std::endl;
     // Promote operands and collect new operands
     SmallVector<Value> promotedOperands;
     for (OpOperand &operand : op->getOpOperands()) {
@@ -53,13 +53,16 @@ public:
       auto newType = oldType.cloneWith(std::nullopt, i32_ty);
       auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
           op->getLoc(), newType, operand.get());
+      promotedVal.dump();
       promotedOperands.push_back(promotedVal);
     }
 
 #if 1
+    // TODO: copy block
     // alter the combine block
     auto &oldCompineOP = op.getCombineOp();
     for (Block &block : oldCompineOP.getBlocks()) {
+      std::cout << "old block" << std::endl;
       for (auto arg : block.getArguments()) {
         // arg.dump();
         arg.setType(i32_ty);
@@ -84,9 +87,61 @@ public:
     auto &newCombineOp = newReduce.getCombineOp();
     rewriter.cloneRegionBefore(oldCompineOP, newCombineOp, newCombineOp.end());
 
+    // change uses for old op to new op
+    for (size_t i = 0; i < op->getNumResults(); i++) {
+      std::cout << "old block" << std::endl;
+      Value newResult = newReduce->getResult(i);
+      op->getResult(i).replaceAllUsesWith(newResult);
+    }
+
     // replace old op with new op
     rewriter.replaceOp(op, newReduce);
     // rewriter.eraseOp(op);
+#elif 0
+    std::cout << "copy combine op:" << std::endl;
+    // see https://github.com/ROCm/triton/blob/triton-mlir/lib/Dialect/TritonGPU/Transforms/DotSlicing.cpp
+
+    // old region & block
+    // Region &oldCombineRegion = op.getCombineOp();
+    // auto oldCombineBlocks = oldCombineRegion.getBlocks();
+    // std::cout << "oldCombineBlocks size:" << oldCombineBlocks.size()
+    //           << std::endl;
+    // Block *oldCombineBlock = &(op.getCombineOp().begin());
+    // Operation *oldreduceReturn = oldCombineBlock.getTerminator();
+    // old op
+    auto &oldCompineOP = op.getCombineOp();
+    
+    // new op
+    auto newReduceOp = rewriter.create<triton::ReduceOp>(op.getLoc(), promotedOperands, adaptor.getAxis());
+    auto &newCompineOP = newReduceOp.getCombineOp();
+    for (Block &newBlock : newCompineOP.getBlocks()) {
+      std::cout << "new block" << std::endl;
+      for (size_t i = 0; i < oldCompineOP.getNumArguments(); i++) {
+        std::cout << "new arg" << std::endl;
+        newBlock.addArgument(i32_ty, newReduceOp.getLoc());
+      }
+    }
+
+    // auto &oldCompineOP = op.getCombineOp();
+    // for (Block &oldBlock : oldCompineOP.getBlocks()) {
+    //   for (auto oldArg : oldBlock.getArguments()) {
+    //   }
+    // }
+
+
+   
+
+    // // new region & block
+    // Block *newCombineBlock = &(newReduceOp.getCombineOp().begin());
+
+
+    // // copy to new block
+    // for (auto oldArg : oldCombineBlock->getArguments()) {
+    //   newCombineBlock->addArgument(i32_ty, newReduceOp.getLoc());
+    // }
+
+    // replace old op with new op
+    rewriter.replaceOp(op, newReduceOp);
 #elif 0
     // clone combine region
     // Region &oldCombineRegion = op.getCombineOp();
