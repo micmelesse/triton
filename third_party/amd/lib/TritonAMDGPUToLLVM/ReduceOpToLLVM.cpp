@@ -56,6 +56,7 @@ public:
       promotedOperands.push_back(promotedVal);
     }
 
+#if 1
     // alter the combine block
     auto &oldCompineOP = op.getCombineOp();
     for (Block &block : oldCompineOP.getBlocks()) {
@@ -86,6 +87,28 @@ public:
     // replace old op with new op
     rewriter.replaceOp(op, newReduce);
     // rewriter.eraseOp(op);
+#elif 0
+    // clone combine region
+    // Region &oldCombineRegion = op.getCombineOp();
+    // Block &oldCombineBlock = oldCombineRegion.front();
+
+    auto newReduceOp = rewriter.create<triton::ReduceOp>(op.getLoc(), promotedOperands, adaptor.getAxis());
+
+    // Region &newCombineRegion = newReduceOp.getCombineOp();
+    // rewriter.cloneRegionBefore(oldCombineRegion, newCombineRegion,
+    //                            newCombineRegion.end());
+
+
+    // Block &newCombineBlock = newCombineRegion.front();
+    // Operation *newReduceReturn = newCombineBlock.getTerminator();
+
+    // mod.dump();
+
+    // rewriter.replaceOp(op, newReduceOp.getResults());
+    rewriter.eraseOp(op);
+#endif 
+
+
     return success();
   }
 
@@ -117,6 +140,55 @@ public:
     Location loc = op->getLoc();
 
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
+#elif 0
+
+  ReduceOpHelper helper(op);
+  assert(helper.isSupportedLayout() &&
+         "Unexpected srcLayout in ReduceOpConversion");
+  Location loc = op->getLoc();
+
+  SmallVector<Value> promotedOperands;
+  for (OpOperand &operand : op->getOpOperands()) {
+    auto oldType = operand.get().getType().cast<RankedTensorType>();
+    auto newType = oldType.cloneWith(std::nullopt, i32_ty);
+    auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
+        op->getLoc(), newType, operand.get());
+    promotedOperands.push_back(promotedVal);
+  }
+
+  llvm::SmallVector<mlir::RankedTensorType> inputTypes = op.getInputTypes();
+  SmallVector<Type> elemTypes = op.getElementTypes();
+  // auto operands = adaptor.getOperands();
+  unsigned srcElems = getTotalElemsPerThread(inputTypes[0]);
+  std::cout << "srcElems: " << srcElems << std::endl;
+  SmallVector<SmallVector<Value>> srcValues(srcElems);
+  for (unsigned i = 0; i < op.getNumOperands(); ++i) {
+    auto llvmStruct = promotedOperands[i];
+    // auto values =
+    //     getTypeConverter()->unpackLLElements(loc, llvmStruct, rewriter);
+    SmallVector<Value> values;
+    if (llvmStruct.getType().isIntOrIndexOrFloat() ||
+        llvmStruct.getType().isa<triton::PointerType>() ||
+        llvmStruct.getType().isa<LLVM::LLVMPointerType>()) {
+      values = {llvmStruct};
+    } else {
+      ArrayRef<Type> llvmTypes =
+          llvmStruct.getType().cast<LLVM::LLVMStructType>().getBody();
+      
+      SmallVector<Value> results(llvmTypes.size());
+      for (unsigned j = 0; j < llvmTypes.size(); ++j) {
+        Type type = llvmTypes[i];
+        results[i] = extract_val(type, llvmStruct, j);
+      }
+      values = results;
+    }
+
+    assert(values.size() == srcValues.size());
+    for (unsigned j = 0; j < srcValues.size(); ++j) {
+      srcValues[j].push_back(values[j]);
+    }
+  }
+
 #elif 0
     auto types = op.getInputTypes();
     auto operands = adaptor.getOperands();
@@ -740,9 +812,14 @@ void populateReduceOpToLLVMPatterns(
     ConvertTritonGPUOpToLLVMPatternBase::IndexCacheInfo &indexCacheInfo,
     int computeCapability, PatternBenefit benefit) {
 
+#if 1
   patterns.add<ReduceOpPromotionConversion>(
       typeConverter, allocation, indexCacheInfo, computeCapability, 2);
   patterns.add<ReduceOpConversion>(typeConverter, allocation, indexCacheInfo,
                                    computeCapability, 1);
+#elif 0
+  patterns.add<ReduceOpConversion>(typeConverter, allocation, indexCacheInfo,
+                                   computeCapability, benefit);
+#endif
 }
 }
