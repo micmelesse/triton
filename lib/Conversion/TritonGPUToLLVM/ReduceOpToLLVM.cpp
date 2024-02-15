@@ -90,7 +90,7 @@ private:
     }
 
     // Create a new copy of the reduce block, and inline it
-    Block *currentBlock = rewriter.getBlock();
+    Block *currentBlock = rewriter.getBlock(); // try
     Region &parent = *currentBlock->getParent();
     rewriter.cloneRegionBefore(combineOp, &parent.front());
     auto &newReduce = parent.front();
