@@ -240,7 +240,11 @@ public:
 
       std::cout << "copy ops" << std::endl;
       for (Operation &oldOp : oldBlock.getOperations()) {
-        Operation *newOp = rewriter.clone(oldOp); // create a new op here maybe
+        // clone op
+        Operation *newOp = rewriter.clone(oldOp); // Maybe create a new op here maybe seems to be shared with old op
+
+        // think about op uses
+        
         // update operands
         for (OpOperand &operand : newOp->getOpOperands()) {
             auto val = operand.get();
@@ -248,6 +252,14 @@ public:
             if (type.isInteger(16)){
                 val.setType(i32_ty);
             }
+        }
+
+        // update results
+        for (Value result : newOp->getResults()) {
+          auto type = result.getType();
+          if (type.isInteger(16)) {
+            result.setType(i32_ty);
+          }
         }
       }
     }
