@@ -18,12 +18,6 @@ using ::AMD::TritonGPUToLLVMTypeConverter;
 using ::AMD::ConvertTritonGPUOpToLLVMPatternBase;
 using ::AMD::ConvertTritonGPUOpToLLVMPattern;
 
-
-static void addNamedAttrs(Operation *op, DictionaryAttr dictAttrs) {
-  for (const NamedAttribute attr : dictAttrs.getValue())
-    if (!op->hasAttr(attr.getName()))
-      op->setAttr(attr.getName(), attr.getValue());
-}
 namespace AMD{
 namespace {
 struct ReduceOpPromotionConversion
@@ -43,173 +37,8 @@ public:
     std::cout << "ReduceOpPromotionConversion" << std::endl;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     mod.dump();
-#if 0
-    auto opOperands = op->getOpOperands();
-    std::cout << "promote operands: " << std::endl;
-    // Promote operands and collect new operands
-    SmallVector<Value> promotedOperands;
-    for (OpOperand &operand : op->getOpOperands()) {
-      auto oldType = operand.get().getType().cast<RankedTensorType>();
-      auto newType = oldType.cloneWith(std::nullopt, i32_ty);
-      auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
-          op->getLoc(), newType, operand.get());
-      promotedVal.dump();
-      promotedOperands.push_back(promotedVal);
-    }
-#endif
 
-#if 0
-    // TODO: copy block
-    // alter the combine block
-    auto &oldCompineRegion = op.getCombineOp();
-    for (Block &block : oldCompineRegion.getBlocks()) {
-      std::cout << "old block" << std::endl;
-      for (auto arg : block.getArguments()) {
-        // arg.dump();
-        arg.setType(i32_ty);
-      }
-
-      // for (Operation &op : block.getOperations()) {
-      //   op.dump();
-      // }
-
-      Operation *reduceReturn = block.getTerminator();
-      // reduceReturn->dump();
-      for (OpOperand &o : reduceReturn->getOpOperands()) {
-        o.get().setType(i32_ty);
-      }
-    }
-
-    // new op
-    auto newReduceOp = rewriter.create<triton::ReduceOp>(op.getLoc(), promotedOperands, adaptor.getAxis());
-    addNamedAttrs(newReduceOp, adaptor.getAttributes());
-
-    // attach new block
-    auto &newCombineOp = newReduceOp.getCombineOp();
-    rewriter.cloneRegionBefore(oldCompineRegion, newCombineOp, newCombineOp.end());
-
-    // change uses for old op to new op
-    for (size_t i = 0; i < op->getNumResults(); i++) {
-      std::cout << "old block" << std::endl;
-      Value newResult = newReduceOp->getResult(i);
-      op->getResult(i).replaceAllUsesWith(newResult);
-    }
-
-    // replace old op with new op
-    rewriter.replaceOp(op, newReduceOp);
-    // rewriter.eraseOp(op);
-#elif 0
-    IRMapping mapping;
-    // mapping.map(*(op.getOperands().begin()), newLoopResult);
-    
-
-    std::cout << "promote operands: " << std::endl;
-
-    // promote input Values
-    for (OpOperand &operand : op->getOpOperands()) {
-      auto oldVal = operand.get();
-      auto oldType = oldVal.getType().cast<RankedTensorType>();
-      auto newType = oldType.cloneWith(std::nullopt, i32_ty);
-      auto promotedVal =
-          rewriter.create<mlir::arith::ExtSIOp>(op->getLoc(), newType, oldVal);
-      mapping.map(oldVal, promotedVal);
-    }
-
-
-
-    Operation *newReduceOp = cloneWithInferType(rewriter, &(*op), mapping);
-    auto typeInfer = dyn_cast<InferTypeOpInterface>(newReduceOp);
-    if (typeInfer) {
-      SmallVector<Type> newTypes;
-      auto success = typeInfer.inferReturnTypes(
-          newReduceOp->getContext(), newReduceOp->getLoc(),
-          newReduceOp->getOperands(), newReduceOp->getAttrDictionary(),
-          newReduceOp->getPropertiesStorage(), newReduceOp->getRegions(), newTypes);
-      if (succeeded(success)) {
-        for (size_t i = 0; i < newTypes.size(); i++)
-          newReduceOp->getResult(i).setType(newTypes[i]);
-      }
-    }
-    
-    // output i32_ty
-    // for (OpResult &newResult : newReduceOp->getResults()) {
-    //   newResult.setType(i32_ty);
-    // }
-
-    // trunc first arg back to i16
-    auto demotedValue =
-          rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
-    op->getResult(0).replaceAllUsesWith(demotedValue);
-
-
-    // change uses for old op to new op
-    // for (size_t i = 0; i < op->getNumResults(); i++) {
-    //   std::cout << "results" << std::endl;
-    //   Value newResult = newReduceOp->getResult(i);
-    //   op->getResult(i).replaceAllUsesWith(newResult);
-    // }
-
-    // replace old op with new op
-    rewriter.replaceOp(op, {demotedValue, newReduceOp->getResult(1)});
-
-#elif 0
-    // create mapping
-    // IRMapping mapping;
-
-    // std::cout << "map operands: " << std::endl;
-    // for (OpOperand &oldOperand : op->getOpOperands()) {
-    //   auto oldVal = oldOperand.get();
-    //   auto oldType = oldVal.getType().cast<RankedTensorType>();
-    //   auto newType = oldType.cloneWith(std::nullopt, i32_ty);
-    //   auto newVal =
-    //       rewriter.create<mlir::arith::ExtSIOp>(op->getLoc(), newType, oldVal);
-    //   mapping.map(oldVal, newVal);
-    // }
-
-
-
-    std::cout << "map region: " << std::endl;
-    for (Region &oldRegion : op->getRegions()) {
-      std::cout << "map block: " << std::endl;
-      for (Block &oldBlock : oldRegion.getBlocks()) {
-
-        IRMapping opMapping;
-        std::cout << "map child op: " << std::endl;
-        for (Operation &oldChildOp : oldBlock.getOperations()) {
-          
-          std::cout << "map Operand: " << std::endl;
-          for (OpOperand &oldChildOperand : oldChildOp->getOpOperands()) {
-            auto oldVal = oldChildOperand.get();
-            // newVal ?
-            opMapping.map(oldVal, newVal);
-          }
-
-          auto newOp = oldChildOp.clone(opMapping)
-          
-         
-          
-        }
-      }
-    }
-
-
-    // clone op
-    // Operation *newReduceOp = op.clone(mapping);
-
-    std::cout << "set result types: " << std::endl;
-    for (opResult &oldResult : op->getResults()) {
-      newReduce->getResult(i).setType(newTypes[i])
-    }
-
-
-    // post demote
-    // auto demotedValue =
-    //       rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
-    // op->getResult(0).replaceAllUsesWith(demotedValue);
-
-    // // replace old op with new op
-    // rewriter.replaceOp(op, {demotedValue, newReduceOp->getResult(1)});
-#elif 1
+#if 1
     std::cout << "promote operands: " << std::endl;
     SmallVector<Value> promotedOperands;
     for (OpOperand &operand : op->getOpOperands()) {
@@ -264,10 +93,8 @@ public:
       }
     }
     
-#if 1
-    rewriter.setInsertionPointAfter(newReduceOp);
-
     std::cout << "trunc result 0: " << std::endl;
+    rewriter.setInsertionPointAfter(newReduceOp);
     auto truncResult = rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
 
     // replace uses
@@ -276,34 +103,7 @@ public:
 
     // replace op
     rewriter.replaceOp(op, {truncResult, newReduceOp->getResult(1)});
-#else
-    // replace uses
-    for (size_t i = 0; i < op->getNumResults(); i++) {
-      op->getResult(i).replaceAllUsesWith(newReduceOp->getResult(i));
-    }
-    rewriter.replaceOp(op, newReduceOp);
 #endif
-#elif 0
-    // clone combine region
-    // Region &oldCombineRegion = op.getCombineOp();
-    // Block &oldCombineBlock = oldCombineRegion.front();
-
-    auto newReduceOp = rewriter.create<triton::ReduceOp>(op.getLoc(), promotedOperands, adaptor.getAxis());
-
-    // Region &newCombineRegion = newReduceOp.getCombineOp();
-    // rewriter.cloneRegionBefore(oldCombineRegion, newCombineRegion,
-    //                            newCombineRegion.end());
-
-
-    // Block &newCombineBlock = newCombineRegion.front();
-    // Operation *newReduceReturn = newCombineBlock.getTerminator();
-
-    // mod.dump();
-
-    // rewriter.replaceOp(op, newReduceOp.getResults());
-    rewriter.eraseOp(op);
-#endif 
-
 
     return success();
   }
@@ -326,204 +126,16 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-  std::cout << "ReduceOpConversion"<< std::endl;
-  auto mod = op->getParentOfType<mlir::ModuleOp>();
-  mod.dump();
-#if 1
+    std::cout << "ReduceOpConversion" << std::endl;
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    mod.dump();
+
     ReduceOpHelper helper(op);
     assert(helper.isSupportedLayout() &&
            "Unexpected srcLayout in ReduceOpConversion");
     Location loc = op->getLoc();
 
     auto srcValues = unpackInputs(loc, op, adaptor, rewriter);
-#elif 0
-
-  ReduceOpHelper helper(op);
-  assert(helper.isSupportedLayout() &&
-         "Unexpected srcLayout in ReduceOpConversion");
-  Location loc = op->getLoc();
-
-  SmallVector<Value> promotedOperands;
-  for (OpOperand &operand : op->getOpOperands()) {
-    auto oldType = operand.get().getType().cast<RankedTensorType>();
-    auto newType = oldType.cloneWith(std::nullopt, i32_ty);
-    auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
-        op->getLoc(), newType, operand.get());
-    promotedOperands.push_back(promotedVal);
-  }
-
-  llvm::SmallVector<mlir::RankedTensorType> inputTypes = op.getInputTypes();
-  SmallVector<Type> elemTypes = op.getElementTypes();
-  // auto operands = adaptor.getOperands();
-  unsigned srcElems = getTotalElemsPerThread(inputTypes[0]);
-  std::cout << "srcElems: " << srcElems << std::endl;
-  SmallVector<SmallVector<Value>> srcValues(srcElems);
-  for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-    auto llvmStruct = promotedOperands[i];
-    // auto values =
-    //     getTypeConverter()->unpackLLElements(loc, llvmStruct, rewriter);
-    SmallVector<Value> values;
-    if (llvmStruct.getType().isIntOrIndexOrFloat() ||
-        llvmStruct.getType().isa<triton::PointerType>() ||
-        llvmStruct.getType().isa<LLVM::LLVMPointerType>()) {
-      values = {llvmStruct};
-    } else {
-      ArrayRef<Type> llvmTypes =
-          llvmStruct.getType().cast<LLVM::LLVMStructType>().getBody();
-      
-      SmallVector<Value> results(llvmTypes.size());
-      for (unsigned j = 0; j < llvmTypes.size(); ++j) {
-        Type type = llvmTypes[i];
-        results[i] = extract_val(type, llvmStruct, j);
-      }
-      values = results;
-    }
-
-    assert(values.size() == srcValues.size());
-    for (unsigned j = 0; j < srcValues.size(); ++j) {
-      srcValues[j].push_back(values[j]);
-    }
-  }
-
-#elif 0
-    auto types = op.getInputTypes();
-    auto operands = adaptor.getOperands();
-    unsigned srcElems = getTotalElemsPerThread(types[0]);
-    SmallVector<SmallVector<Value>> srcValues(srcElems);
-    for (unsigned i = 0; i < op.getNumOperands(); ++i) {
-      // unpack the operands
-      SmallVector<Value> values;
-
-      auto operand = operands[i];
-      if (operand.getType().isIntOrIndexOrFloat() ||
-          operand.getType().isa<triton::PointerType>() ||
-          operand.getType().isa<LLVM::LLVMPointerType>()) {
-        values = {operand};
-      } else {
-        ArrayRef<Type> types =
-            operand.getType().cast<LLVM::LLVMStructType>().getBody();
-        values.reserve(types.size());
-        for (unsigned i = 0; i < types.size(); ++i) {
-          Type type = types[i];
-          unsigned bitwidth = type.getIntOrFloatBitWidth();
-          std::cout << "bitwidth: " << bitwidth << std::endl;
-
-          Value val = extract_val(type, operand, i);
-          if (bitwidth < 32) {
-            std::cout << "promoting i" << bitwidth << " to i32" << std::endl;
-            mod.dump();
-            Value new_val = sext(i32_ty, val);
-            values.push_back(new_val);
-            mod.dump();
-            val.dump();
-          }else{
-            values.push_back(val);
-          }
-
-             
-        }
-      }
-
-      assert(values.size() == srcValues.size());
-      for (unsigned j = 0; j < srcValues.size(); ++j) {
-        srcValues[j].push_back(values[j]);
-      }
-    }
-#elif 0
-    mlir::ValueRange operands =
-        adaptor.getOperands(); // iterator over values of type (tensor<128xi16>,
-                               // tensor<128xi32>)
-    unsigned numOperands = op.getNumOperands(); // 2
-    llvm::SmallVector<mlir::RankedTensorType> types =
-        op.getInputTypes(); // (tensor<128xi16>, tensor<128xi32>)
-    llvm::SmallVector<mlir::Type> elemTypes = op.getElementTypes(); // i16, i32
-
-    // NOTE: just operate on operands[0] tensor<128xi16>
-    mlir::Value operand = operands[0];           // value of tensor<128xi16>
-    mlir::Type operand_type = operand.getType(); // tensor<128xi16>
-
-    if (isa<LLVM::LLVMStructType>(operand_type)) {
-      std::cout << "operand is an LLVMStructType" << std::endl;
-      operand_type.dump();
-      mlir::Type operand_element_type = elemTypes[0]; // i16
-      if (operand_element_type.isInteger(16)) {
-        std::cout << "operand element type is i16" << std::endl;
-
-        // just use second arg which is tensor<128xi32>
-        SmallVector<mlir::Value> newOperands(numOperands);
-        newOperands[0] = operands[1];
-        newOperands[1] = operands[1];
-        llvm::SmallVector<mlir::Type> newTypes(numOperands);
-        newTypes[0] = elemTypes[1];
-        newTypes[1] = elemTypes[1];
-
-        // new state
-        OperationState newReduceState(op->getLoc(), op->getName());
-        newReduceState.addOperands(newOperands);
-        newReduceState.addTypes(newTypes);
-        newReduceState.addAttributes(op->getAttrs());
-        auto newReduce = rewriter.create(newReduceState);
-        rewriter.replaceOp(op, newReduce->getResults());
-        // rewriter.replaceOp(op, newReduce);
-
-        mod.dump();
-        // rewriter.replaceOpWithNewOp<triton::ReduceOp>(op, newReduceState);
-        return success();
-      }
-    } else {
-      std::cout << "operand is not an LLVMStructType" << std::endl;
-      operand_type.dump();
-    }
-#elif 0
-    // dump input module state
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    mod.dump();
-
-    mlir::ValueRange operands = adaptor.getOperands(); // iterator over values of type (tensor<128xi16>, tensor<128xi32>)
-    unsigned numOperands = op.getNumOperands(); // 2
-    llvm::SmallVector<mlir::RankedTensorType> types =
-        op.getInputTypes(); // (tensor<128xi16>, tensor<128xi32>)
-    llvm::SmallVector<mlir::Type> elemTypes = op.getElementTypes(); // i16, i32
-    unsigned axis = op.getAxis();
-
-    // just use second arg which is tensor<128xi32>
-    SmallVector<mlir::Value> newOperands(numOperands);
-    newOperands[0] = operands[1];
-    newOperands[1] = operands[1];
-    llvm::SmallVector<mlir::Type> newTypes(numOperands);
-    newTypes[0] = elemTypes[1];
-    newTypes[1] = elemTypes[1];
-
-    // new op state
-    OperationState newReduceState(op->getLoc(), op->getName());
-    newReduceState.addOperands(newOperands);
-    newReduceState.addTypes(newTypes);
-    newReduceState.addAttributes(op->getAttrs());
-    newReduceState.addRegions(op->getRegions());
-    Operation* newReduce = rewriter.create(newReduceState);
-    // auto newReduce = rewriter.create<triton::ReduceOp>(newReduceState, newOperands, axis);
-    // addNamedAttrs(newReduce, adaptor.getAttributes());
-
-    mod.dump();
-
-    // reduce block
-    // auto &newCombineOp = newReduce->getCombineOp();
-    // rewriter.cloneRegionBefore(op.getCombineOp(), newCombineOp,
-    //                            newCombineOp.end());
-    // rewriter.replaceOp(op, newReduce);
-
-    mod.dump();
-    
-    // extract new op
-    auto srcValues = unpackInputs(loc, newReduce, adaptor, rewriter);
-
-    // preamble
-    ReduceOpHelper helper(newReduce);
-    assert(helper.isSupportedLayout() &&
-           "Unexpected srcLayout in ReduceOpConversion");
-    Location loc = newReduce->getLoc();
-#endif
-
     std::map<SmallVector<unsigned>, SmallVector<Value>> accs;
     std::map<SmallVector<unsigned>, SmallVector<Value>> indices;
     // First reduce all the values along axis within each thread.
