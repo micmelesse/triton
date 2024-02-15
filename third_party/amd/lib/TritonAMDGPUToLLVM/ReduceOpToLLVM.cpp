@@ -41,21 +41,24 @@ public:
 #if 1
     rewriter.modifyOpInPlace(op, [&]() {
       // promote operands
-      SmallVector<Value> promotedOperands;
+      SmallVector<Value> newOperands;
       for (OpOperand &operand : op->getOpOperands()) {
-        auto oldType = operand.get().getType().cast<RankedTensorType>();
-        auto newType = oldType.cloneWith(std::nullopt, i32_ty);
-        auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
-            op->getLoc(), newType, operand.get());
-        promotedVal.dump();
-        promotedOperands.push_back(promotedVal);
+        auto val = operand.get();
+        auto oldType = val.getType().cast<RankedTensorType>();
+        if (oldType.getElementType().isInteger(16)) {
+          auto newType = oldType.cloneWith(std::nullopt, i32_ty);
+          auto promotedVal =
+              rewriter.create<mlir::arith::ExtSIOp>(op->getLoc(), newType, val);
+          newOperands.push_back(promotedVal);
+        } else {
+          newOperands.push_back(val);
+        }
       }
-      op->setOperands(promotedOperands);
+      op->setOperands(newOperands);
 
       // promote results
       for (Value result : op.getResults()) {
-        auto type = result.getType();
-        if (type.isInteger(16)) {
+        if (result.getType().isInteger(16)) {
           result.setType(i32_ty);
         }
       }
