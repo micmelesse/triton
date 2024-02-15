@@ -39,6 +39,30 @@ public:
     mod.dump();
 
 #if 1
+    rewriter.modifyOpInPlace(op, [&]() {
+      SmallVector<Value> promotedOperands;
+      for (OpOperand &operand : op->getOpOperands()) {
+        auto oldType = operand.get().getType().cast<RankedTensorType>();
+        auto newType = oldType.cloneWith(std::nullopt, i32_ty);
+        auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
+            op->getLoc(), newType, operand.get());
+        promotedVal.dump();
+        promotedOperands.push_back(promotedVal);
+      }
+
+      // replace operands
+      op->setOperands(promotedOperands);
+
+      // set block args
+
+      // trunc
+      rewriter.setInsertionPointAfter(op);
+      auto truncResult = rewriter.create<mlir::arith::TruncIOp>(
+          op->getLoc(), i16_ty, op->getResult(0));
+      op->getResult(0).replaceAllUsesWith(truncResult);
+    });
+
+#else
     std::cout << "promote operands: " << std::endl;
     SmallVector<Value> promotedOperands;
     for (OpOperand &operand : op->getOpOperands()) {
@@ -57,7 +81,7 @@ public:
     Block* newBlock = rewriter.createBlock(&newCompineRegion);
   
 
-    std::cout << "write new op:" << std::endl;
+    std::cout << "write new ops:" << std::endl;
     // write new Block
     rewriter.setInsertionPointToStart(newBlock);
     for (Block &oldBlock : op.getCombineOp().getBlocks()) {
