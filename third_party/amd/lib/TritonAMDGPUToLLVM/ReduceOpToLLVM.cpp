@@ -61,8 +61,8 @@ public:
 #if 0
     // TODO: copy block
     // alter the combine block
-    auto &oldCompineOP = op.getCombineOp();
-    for (Block &block : oldCompineOP.getBlocks()) {
+    auto &oldCompineRegion = op.getCombineOp();
+    for (Block &block : oldCompineRegion.getBlocks()) {
       std::cout << "old block" << std::endl;
       for (auto arg : block.getArguments()) {
         // arg.dump();
@@ -86,7 +86,7 @@ public:
 
     // attach new block
     auto &newCombineOp = newReduceOp.getCombineOp();
-    rewriter.cloneRegionBefore(oldCompineOP, newCombineOp, newCombineOp.end());
+    rewriter.cloneRegionBefore(oldCompineRegion, newCombineOp, newCombineOp.end());
 
     // change uses for old op to new op
     for (size_t i = 0; i < op->getNumResults(); i++) {
@@ -98,7 +98,7 @@ public:
     // replace old op with new op
     rewriter.replaceOp(op, newReduceOp);
     // rewriter.eraseOp(op);
-#elif 1
+#elif 0
     IRMapping mapping;
     // mapping.map(*(op.getOperands().begin()), newLoopResult);
     
@@ -151,49 +151,124 @@ public:
 
     // replace old op with new op
     rewriter.replaceOp(op, {demotedValue, newReduceOp->getResult(1)});
-#elif 0
-    std::cout << "copy combine op:" << std::endl;
-    // see https://github.com/ROCm/triton/blob/triton-mlir/lib/Dialect/TritonGPU/Transforms/DotSlicing.cpp
 
-    // old region & block
-    auto &oldCompineOP = op.getCombineOp();
+#elif 0
+    // create mapping
+    // IRMapping mapping;
+
+    // std::cout << "map operands: " << std::endl;
+    // for (OpOperand &oldOperand : op->getOpOperands()) {
+    //   auto oldVal = oldOperand.get();
+    //   auto oldType = oldVal.getType().cast<RankedTensorType>();
+    //   auto newType = oldType.cloneWith(std::nullopt, i32_ty);
+    //   auto newVal =
+    //       rewriter.create<mlir::arith::ExtSIOp>(op->getLoc(), newType, oldVal);
+    //   mapping.map(oldVal, newVal);
+    // }
+
+
+
+    std::cout << "map region: " << std::endl;
+    for (Region &oldRegion : op->getRegions()) {
+      std::cout << "map block: " << std::endl;
+      for (Block &oldBlock : oldRegion.getBlocks()) {
+
+        IRMapping opMapping;
+        std::cout << "map child op: " << std::endl;
+        for (Operation &oldChildOp : oldBlock.getOperations()) {
+          
+          std::cout << "map Operand: " << std::endl;
+          for (OpOperand &oldChildOperand : oldChildOp->getOpOperands()) {
+            auto oldVal = oldChildOperand.get();
+            // newVal ?
+            opMapping.map(oldVal, newVal);
+          }
+
+          auto newOp = oldChildOp.clone(opMapping)
+          
+         
+          
+        }
+      }
+    }
+
+
+    // clone op
+    // Operation *newReduceOp = op.clone(mapping);
+
+    std::cout << "set result types: " << std::endl;
+    for (opResult &oldResult : op->getResults()) {
+      newReduce->getResult(i).setType(newTypes[i])
+    }
+
+
+    // post demote
+    // auto demotedValue =
+    //       rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
+    // op->getResult(0).replaceAllUsesWith(demotedValue);
+
+    // // replace old op with new op
+    // rewriter.replaceOp(op, {demotedValue, newReduceOp->getResult(1)});
+#elif 1
+    std::cout << "promote operands: " << std::endl;
+    SmallVector<Value> promotedOperands;
+    for (OpOperand &operand : op->getOpOperands()) {
+      auto oldType = operand.get().getType().cast<RankedTensorType>();
+      auto newType = oldType.cloneWith(std::nullopt, i32_ty);
+      auto promotedVal = rewriter.create<mlir::arith::ExtSIOp>(
+          op->getLoc(), newType, operand.get());
+      promotedVal.dump();
+      promotedOperands.push_back(promotedVal);
+    }
     
+    std::cout << "new reduce op:" << std::endl;
     // new op
     auto newReduceOp = rewriter.create<triton::ReduceOp>(op.getLoc(), promotedOperands, adaptor.getAxis());
-    auto &newCompineOP = newReduceOp.getCombineOp();
-    Block* newBlock = rewriter.createBlock(&newCompineOP);
+    auto &newCompineRegion = newReduceOp.getCombineOp();
+    Block* newBlock = rewriter.createBlock(&newCompineRegion);
+  
 
-    for (Block &oldBlock : oldCompineOP.getBlocks()) {
+    std::cout << "write new op:" << std::endl;
+    // write new Block
+    rewriter.setInsertionPointToStart(newBlock);
+    for (Block &oldBlock : op.getCombineOp().getBlocks()) {
       std::cout << "set args" << std::endl;
-      for (size_t i = 0; i < oldCompineOP.getNumArguments(); i++) {
+      for (size_t i = 0; i < oldBlock.getNumArguments(); i++) {
         std::cout << "new arg" << std::endl;
         newBlock->addArgument(i32_ty, newReduceOp.getLoc());
       }
 
       std::cout << "copy ops" << std::endl;
       for (Operation &oldOp : oldBlock.getOperations()) {
-        // create value mapping
-        IRMapping mapping;
-
-
-        Operation *newOp = rewriter.clone(oldOp, mapping);
-        // for (OpOperand &oldOperand : oldOp.getOpOperands()) {
-        //   Value oldValue = oldOperand.get();
-        //   oldValue.dump();
-        //   // newOp->setOperand(oldOperand.getOperandNumber(), );
-        // }
+        Operation *newOp = rewriter.clone(oldOp);
+        // update operands
+        for (OpOperand &operand : newOp->getOpOperands()) {
+            auto val = operand.get();
+            auto type = val.getType();
+            if (type.isInteger(16)){
+                val.setType(i32_ty);
+            }
+        }
       }
     }
+    rewriter.setInsertionPointToEnd(newBlock);
 
-    // change uses for old op to new op
+
+#if 0
+    std::cout << "trunc result: " << std::endl;
+    auto demotedValue =
+          rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
+    op->getResult(0).replaceAllUsesWith(demotedValue);
+
+    std::cout << "replace op: " << std::endl;
+    rewriter.replaceOp(op, {demotedValue, newReduceOp->getResult(1)});
+#else
+    // replace uses
     for (size_t i = 0; i < op->getNumResults(); i++) {
-      std::cout << "results" << std::endl;
-      Value newResult = newReduceOp->getResult(i);
-      op->getResult(i).replaceAllUsesWith(newResult);
+      op->getResult(i).replaceAllUsesWith(newReduceOp->getResult(i));
     }
-
-    // replace old op with new op
     rewriter.replaceOp(op, newReduceOp);
+#endif
 #elif 0
     // clone combine region
     // Region &oldCombineRegion = op.getCombineOp();
