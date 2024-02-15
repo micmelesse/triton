@@ -40,6 +40,8 @@ public:
 
 #if 1
     rewriter.modifyOpInPlace(op, [&]() {
+
+      // promote operands
       SmallVector<Value> promotedOperands;
       for (OpOperand &operand : op->getOpOperands()) {
         auto oldType = operand.get().getType().cast<RankedTensorType>();
@@ -49,17 +51,40 @@ public:
         promotedVal.dump();
         promotedOperands.push_back(promotedVal);
       }
-
-      // replace operands
       op->setOperands(promotedOperands);
 
-      // set block args
+      // promote results
+      for (Value result : op.getResults()) {
+        auto type = result.getType();
+        result.setType(i32_ty);
+      }
 
-      // trunc
-      rewriter.setInsertionPointAfter(op);
-      auto truncResult = rewriter.create<mlir::arith::TruncIOp>(
-          op->getLoc(), i16_ty, op->getResult(0));
-      op->getResult(0).replaceAllUsesWith(truncResult);
+      // promote block
+      for (Block &oldBlock : op.getCombineOp().getBlocks()) {
+        // update block args
+        for (auto arg : oldBlock.getArguments()) {
+          arg.setType(i32_ty);
+        }
+
+        for (Operation &oldOp : oldBlock.getOperations()) {
+          // update operands
+          for (OpOperand &operand : oldOp.getOpOperands()) {
+            auto val = operand.get();
+            auto type = val.getType();
+            if (type.isInteger(16)) {
+              val.setType(i32_ty);
+            }
+          }
+
+          // update results
+          for (Value result : oldOp.getResults()) {
+            auto type = result.getType();
+            if (type.isInteger(16)) {
+              result.setType(i32_ty);
+            }
+          }
+        }
+      }
     });
 
 #else
