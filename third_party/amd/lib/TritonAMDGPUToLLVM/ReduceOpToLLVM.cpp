@@ -240,7 +240,7 @@ public:
 
       std::cout << "copy ops" << std::endl;
       for (Operation &oldOp : oldBlock.getOperations()) {
-        Operation *newOp = rewriter.clone(oldOp);
+        Operation *newOp = rewriter.clone(oldOp); // create a new op here maybe
         // update operands
         for (OpOperand &operand : newOp->getOpOperands()) {
             auto val = operand.get();
@@ -251,17 +251,19 @@ public:
         }
       }
     }
-    rewriter.setInsertionPointToEnd(newBlock);
+    
+#if 1
+    rewriter.setInsertionPointAfter(newReduceOp);
 
+    std::cout << "trunc result 0: " << std::endl;
+    auto truncResult = rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
 
-#if 0
-    std::cout << "trunc result: " << std::endl;
-    auto demotedValue =
-          rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
-    op->getResult(0).replaceAllUsesWith(demotedValue);
+    // replace uses
+    op->getResult(0).replaceAllUsesWith(truncResult);
+    op->getResult(1).replaceAllUsesWith(newReduceOp->getResult(1));
 
-    std::cout << "replace op: " << std::endl;
-    rewriter.replaceOp(op, {demotedValue, newReduceOp->getResult(1)});
+    // replace op
+    rewriter.replaceOp(op, {truncResult, newReduceOp->getResult(1)});
 #else
     // replace uses
     for (size_t i = 0; i < op->getNumResults(); i++) {
