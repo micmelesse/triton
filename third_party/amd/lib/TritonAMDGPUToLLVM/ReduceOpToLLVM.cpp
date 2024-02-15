@@ -98,6 +98,9 @@ public:
     rewriter.replaceOp(op, newReduceOp);
     // rewriter.eraseOp(op);
 #elif 1
+     mapping.map(*(reduce.getOperands().begin()), newLoopResult);
+    auto newReduce2 = cloneWithInferType(builder, &(*reduce), mapping);
+#elif 0
     std::cout << "copy combine op:" << std::endl;
     // see https://github.com/ROCm/triton/blob/triton-mlir/lib/Dialect/TritonGPU/Transforms/DotSlicing.cpp
 
@@ -108,33 +111,28 @@ public:
     auto newReduceOp = rewriter.create<triton::ReduceOp>(op.getLoc(), promotedOperands, adaptor.getAxis());
     auto &newCompineOP = newReduceOp.getCombineOp();
     Block* newBlock = rewriter.createBlock(&newCompineOP);
-   
-   
-    // for (Block &oldBlock : oldCompineOP.getBlocks()) {
-    //   std::cout << "blocks" << std::endl;
-    //   for (size_t i = 0; i < oldCompineOP.getNumArguments(); i++) {
-    //     std::cout << "new arg" << std::endl;
-    //     newBlock.addArgument(i32_ty, newReduceOp.getLoc());
-    //   }
-    // }
 
-    // auto &oldCompineOP = op.getCombineOp();
-    // for (Block &oldBlock : oldCompineOP.getBlocks()) {
-    //   for (auto oldArg : oldBlock.getArguments()) {
-    //   }
-    // }
+    for (Block &oldBlock : oldCompineOP.getBlocks()) {
+      std::cout << "set args" << std::endl;
+      for (size_t i = 0; i < oldCompineOP.getNumArguments(); i++) {
+        std::cout << "new arg" << std::endl;
+        newBlock->addArgument(i32_ty, newReduceOp.getLoc());
+      }
+
+      std::cout << "copy ops" << std::endl;
+      for (Operation &oldOp : oldBlock.getOperations()) {
+        // create value mapping
+        IRMapping mapping;
 
 
-   
-
-    // // new region & block
-    // Block *newCombineBlock = &(newReduceOp.getCombineOp().begin());
-
-
-    // // copy to new block
-    // for (auto oldArg : oldCombineBlock->getArguments()) {
-    //   newCombineBlock->addArgument(i32_ty, newReduceOp.getLoc());
-    // }
+        Operation *newOp = rewriter.clone(oldOp, mapping);
+        // for (OpOperand &oldOperand : oldOp.getOpOperands()) {
+        //   Value oldValue = oldOperand.get();
+        //   oldValue.dump();
+        //   // newOp->setOperand(oldOperand.getOperandNumber(), );
+        // }
+      }
+    }
 
     // change uses for old op to new op
     for (size_t i = 0; i < op->getNumResults(); i++) {
