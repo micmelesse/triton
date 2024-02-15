@@ -40,7 +40,6 @@ public:
 
 #if 1
     rewriter.modifyOpInPlace(op, [&]() {
-
       // promote operands
       SmallVector<Value> promotedOperands;
       for (OpOperand &operand : op->getOpOperands()) {
@@ -56,30 +55,32 @@ public:
       // promote results
       for (Value result : op.getResults()) {
         auto type = result.getType();
-        result.setType(i32_ty);
+        if (type.isInteger(16)) {
+          result.setType(i32_ty);
+        }
       }
 
       // promote block
       for (Block &oldBlock : op.getCombineOp().getBlocks()) {
         // update block args
         for (auto arg : oldBlock.getArguments()) {
-          arg.setType(i32_ty);
+          if (arg.getType().isInteger(16)) {
+            arg.setType(i32_ty);
+          }
         }
 
         for (Operation &oldOp : oldBlock.getOperations()) {
           // update operands
           for (OpOperand &operand : oldOp.getOpOperands()) {
             auto val = operand.get();
-            auto type = val.getType();
-            if (type.isInteger(16)) {
+            if (val.getType().isInteger(16)) {
               val.setType(i32_ty);
             }
           }
 
           // update results
           for (Value result : oldOp.getResults()) {
-            auto type = result.getType();
-            if (type.isInteger(16)) {
+            if (result.getType().isInteger(16)) {
               result.setType(i32_ty);
             }
           }
