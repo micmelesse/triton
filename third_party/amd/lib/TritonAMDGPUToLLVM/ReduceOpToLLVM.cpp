@@ -43,7 +43,7 @@ public:
     std::cout << "ReduceOpPromotionConversion" << std::endl;
     auto mod = op->getParentOfType<mlir::ModuleOp>();
     mod.dump();
-
+#if 0
     auto opOperands = op->getOpOperands();
     std::cout << "promote operands: " << std::endl;
     // Promote operands and collect new operands
@@ -56,6 +56,7 @@ public:
       promotedVal.dump();
       promotedOperands.push_back(promotedVal);
     }
+#endif
 
 #if 0
     // TODO: copy block
@@ -98,8 +99,58 @@ public:
     rewriter.replaceOp(op, newReduceOp);
     // rewriter.eraseOp(op);
 #elif 1
-     mapping.map(*(reduce.getOperands().begin()), newLoopResult);
-    auto newReduce2 = cloneWithInferType(builder, &(*reduce), mapping);
+    IRMapping mapping;
+    // mapping.map(*(op.getOperands().begin()), newLoopResult);
+    
+
+    std::cout << "promote operands: " << std::endl;
+
+    // promote input Values
+    for (OpOperand &operand : op->getOpOperands()) {
+      auto oldVal = operand.get();
+      auto oldType = oldVal.getType().cast<RankedTensorType>();
+      auto newType = oldType.cloneWith(std::nullopt, i32_ty);
+      auto promotedVal =
+          rewriter.create<mlir::arith::ExtSIOp>(op->getLoc(), newType, oldVal);
+      mapping.map(oldVal, promotedVal);
+    }
+
+
+
+    Operation *newReduceOp = cloneWithInferType(rewriter, &(*op), mapping);
+    auto typeInfer = dyn_cast<InferTypeOpInterface>(newReduceOp);
+    if (typeInfer) {
+      SmallVector<Type> newTypes;
+      auto success = typeInfer.inferReturnTypes(
+          newReduceOp->getContext(), newReduceOp->getLoc(),
+          newReduceOp->getOperands(), newReduceOp->getAttrDictionary(),
+          newReduceOp->getPropertiesStorage(), newReduceOp->getRegions(), newTypes);
+      if (succeeded(success)) {
+        for (size_t i = 0; i < newTypes.size(); i++)
+          newReduceOp->getResult(i).setType(newTypes[i]);
+      }
+    }
+    
+    // output i32_ty
+    // for (OpResult &newResult : newReduceOp->getResults()) {
+    //   newResult.setType(i32_ty);
+    // }
+
+    // trunc first arg back to i16
+    auto demotedValue =
+          rewriter.create<mlir::arith::TruncIOp>(newReduceOp->getLoc(), i16_ty, newReduceOp->getResult(0));
+    op->getResult(0).replaceAllUsesWith(demotedValue);
+
+
+    // change uses for old op to new op
+    // for (size_t i = 0; i < op->getNumResults(); i++) {
+    //   std::cout << "results" << std::endl;
+    //   Value newResult = newReduceOp->getResult(i);
+    //   op->getResult(i).replaceAllUsesWith(newResult);
+    // }
+
+    // replace old op with new op
+    rewriter.replaceOp(op, {demotedValue, newReduceOp->getResult(1)});
 #elif 0
     std::cout << "copy combine op:" << std::endl;
     // see https://github.com/ROCm/triton/blob/triton-mlir/lib/Dialect/TritonGPU/Transforms/DotSlicing.cpp
