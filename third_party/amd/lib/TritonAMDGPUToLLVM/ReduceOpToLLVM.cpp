@@ -34,9 +34,9 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // std::cout << "ReduceOpPromotionConversion" << std::endl;
-    // auto mod = op->getParentOfType<mlir::ModuleOp>();
-    // mod.dump();
+    std::cout << "ReduceOpPromotionConversion" << std::endl;
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    mod.dump();
 
 #if 1
     rewriter.modifyOpInPlace(op, [&]() {
@@ -69,9 +69,20 @@ public:
           result.setType(i32_ty);
         } else if (type.isF16()) {
           result.setType(f32_ty);
+
+          // add trunc if float result type was changed
+          rewriter.setInsertionPointAfter(op);
+          auto truncResult = rewriter.create<mlir::arith::TruncFOp>(
+              result.getLoc(), f16_ty, result);
+          
+          // replace uses
+          result.replaceUsesWithIf(truncResult, [](OpOperand &user) {
+            return !isa<mlir::arith::TruncFOp>(user.getOwner());
+          });
+
         }
       }
-
+ 
       // promote block
       for (Block &oldBlock : op.getCombineOp().getBlocks()) {
         // update block args
@@ -197,9 +208,9 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    // std::cout << "ReduceOpConversion" << std::endl;
-    // auto mod = op->getParentOfType<mlir::ModuleOp>();
-    // mod.dump();
+    std::cout << "ReduceOpConversion" << std::endl;
+    auto mod = op->getParentOfType<mlir::ModuleOp>();
+    mod.dump();
 
     ReduceOpHelper helper(op);
     assert(helper.isSupportedLayout() &&
@@ -248,9 +259,6 @@ public:
     // set output values
     loadReductionAndPackResult(helper, smemShape, smemBases, rewriter);
 
-
-    // std::cout << "ReduceOpConversion Result:"<< std::endl;
-    // mod.dump();
     return success();
   }
 
