@@ -45,7 +45,8 @@ public:
       for (OpOperand &operand : op->getOpOperands()) {
         auto val = operand.get();
         auto oldType = val.getType().cast<RankedTensorType>();
-        if (oldType.getElementType().isInteger(16)) {
+        auto elemType = oldType.getElementType();
+        if (elemType.isInteger(16) || elemType.isInteger(8)) {
           auto newType = oldType.cloneWith(std::nullopt, i32_ty);
           auto promotedVal =
               rewriter.create<mlir::arith::ExtSIOp>(op->getLoc(), newType, val);
@@ -58,7 +59,8 @@ public:
 
       // promote results
       for (Value result : op.getResults()) {
-        if (result.getType().isInteger(16)) {
+        auto type = result.getType();
+        if (type.isInteger(16)|| type.isInteger(8)) {
           result.setType(i32_ty);
         }
       }
@@ -67,7 +69,8 @@ public:
       for (Block &oldBlock : op.getCombineOp().getBlocks()) {
         // update block args
         for (auto arg : oldBlock.getArguments()) {
-          if (arg.getType().isInteger(16)) {
+          auto type = arg.getType();
+          if (type.isInteger(16)|| type.isInteger(8)) {
             arg.setType(i32_ty);
           }
         }
@@ -76,14 +79,16 @@ public:
           // update operands
           for (OpOperand &operand : oldOp.getOpOperands()) {
             auto val = operand.get();
-            if (val.getType().isInteger(16)) {
+            auto type = val.getType();
+            if (type.isInteger(16)|| type.isInteger(8)) {
               val.setType(i32_ty);
             }
           }
 
           // update results
           for (Value result : oldOp.getResults()) {
-            if (result.getType().isInteger(16)) {
+            auto type = result.getType();
+            if (type.isInteger(16)) {
               result.setType(i32_ty);
             }
           }
