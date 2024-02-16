@@ -34,9 +34,9 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    std::cout << "ReduceOpPromotionConversion" << std::endl;
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    mod.dump();
+    // std::cout << "ReduceOpPromotionConversion" << std::endl;
+    // auto mod = op->getParentOfType<mlir::ModuleOp>();
+    // mod.dump();
 
 #if 1
     rewriter.modifyOpInPlace(op, [&]() {
@@ -51,6 +51,11 @@ public:
           auto promotedVal =
               rewriter.create<mlir::arith::ExtSIOp>(op->getLoc(), newType, val);
           newOperands.push_back(promotedVal);
+        } else if (elemType.isF16()) {
+          auto newType = oldType.cloneWith(std::nullopt, f32_ty);
+          auto promotedVal =
+              rewriter.create<mlir::arith::ExtFOp>(op->getLoc(), newType, val);
+          newOperands.push_back(promotedVal);
         } else {
           newOperands.push_back(val);
         }
@@ -60,8 +65,10 @@ public:
       // promote results
       for (Value result : op.getResults()) {
         auto type = result.getType();
-        if (type.isInteger(16)|| type.isInteger(8)) {
+        if (type.isInteger(16) || type.isInteger(8)) {
           result.setType(i32_ty);
+        } else if (type.isF16()) {
+          result.setType(f32_ty);
         }
       }
 
@@ -70,8 +77,10 @@ public:
         // update block args
         for (auto arg : oldBlock.getArguments()) {
           auto type = arg.getType();
-          if (type.isInteger(16)|| type.isInteger(8)) {
+          if (type.isInteger(16) || type.isInteger(8)) {
             arg.setType(i32_ty);
+          } else if (type.isF16()) {
+            arg.setType(f32_ty);
           }
         }
 
@@ -80,16 +89,20 @@ public:
           for (OpOperand &operand : oldOp.getOpOperands()) {
             auto val = operand.get();
             auto type = val.getType();
-            if (type.isInteger(16)|| type.isInteger(8)) {
+            if (type.isInteger(16) || type.isInteger(8)) {
               val.setType(i32_ty);
+            } else if (type.isF16()) {
+              val.setType(f32_ty);
             }
           }
 
           // update results
           for (Value result : oldOp.getResults()) {
             auto type = result.getType();
-            if (type.isInteger(16)) {
+            if (type.isInteger(16) || type.isInteger(8)) {
               result.setType(i32_ty);
+            } else if (type.isF16()) {
+              result.setType(f32_ty);
             }
           }
         }
@@ -184,9 +197,9 @@ public:
   LogicalResult
   matchAndRewrite(triton::ReduceOp op, OpAdaptor adaptor,
                   ConversionPatternRewriter &rewriter) const override {
-    std::cout << "ReduceOpConversion" << std::endl;
-    auto mod = op->getParentOfType<mlir::ModuleOp>();
-    mod.dump();
+    // std::cout << "ReduceOpConversion" << std::endl;
+    // auto mod = op->getParentOfType<mlir::ModuleOp>();
+    // mod.dump();
 
     ReduceOpHelper helper(op);
     assert(helper.isSupportedLayout() &&
@@ -236,8 +249,8 @@ public:
     loadReductionAndPackResult(helper, smemShape, smemBases, rewriter);
 
 
-    std::cout << "ReduceOpConversion Result:"<< std::endl;
-    mod.dump();
+    // std::cout << "ReduceOpConversion Result:"<< std::endl;
+    // mod.dump();
     return success();
   }
 
