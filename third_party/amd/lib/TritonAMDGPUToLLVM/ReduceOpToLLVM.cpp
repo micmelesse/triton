@@ -87,6 +87,8 @@ public:
           auto elemType = oldType.getElementType();
           if (elemType.isInteger(16) || elemType.isInteger(8)) {
             result.setType(oldType.cloneWith(std::nullopt, i32_ty));
+          } else if (elemType.isF16()) {
+            result.setType(oldType.cloneWith(std::nullopt, f32_ty));
           }
         }
       }
