@@ -80,9 +80,17 @@ public:
             return !isa<mlir::arith::TruncFOp>(user.getOwner());
           });
 
+        } else if (type.isa<RankedTensorType>()) {
+          std::cout << "og tensor result: " << std::endl;
+          type.dump();
+          auto oldType = type.cast<RankedTensorType>();
+          auto elemType = oldType.getElementType();
+          if (elemType.isInteger(16) || elemType.isInteger(8)) {
+            result.setType(oldType.cloneWith(std::nullopt, i32_ty));
+          }
         }
       }
- 
+
       // promote block
       for (Block &oldBlock : op.getCombineOp().getBlocks()) {
         // update block args
