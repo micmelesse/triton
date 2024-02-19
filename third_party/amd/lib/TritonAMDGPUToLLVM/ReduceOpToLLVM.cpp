@@ -89,6 +89,16 @@ public:
             result.setType(oldType.cloneWith(std::nullopt, i32_ty));
           } else if (elemType.isF16()) {
             result.setType(oldType.cloneWith(std::nullopt, f32_ty));
+
+            // add trunc if float result type was changed
+            rewriter.setInsertionPointAfter(op);
+            auto truncResult = rewriter.create<mlir::arith::TruncFOp>(
+                result.getLoc(), oldType, result);
+
+            // replace uses
+            result.replaceUsesWithIf(truncResult, [](OpOperand &user) {
+              return !isa<mlir::arith::TruncFOp>(user.getOwner());
+            });
           }
         }
       }
