@@ -137,8 +137,22 @@ Value storeShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
   return val;
 }
 
+template<class T>
+T getVal(const std::string& val) {
+  if (val == "max") {
+    return std::numeric_limits<T>::max();
+  } else if (val == "min") {
+    return std::numeric_limits<T>::min();
+  } else if (val == "zero") {
+    return T(0);
+  } else if (val == "one") {
+    return T(1);
+  }
+  return T(0);
+}
+
 Value loadShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
-                 Type elemTy, Value pred) {
+                 Type elemTy, Value pred, const std::string& val) {
   auto loaded = rewriter.create<scf::IfOp>(loc, pred,
     [&](OpBuilder& builder, Location loc) {
       auto loadVal = load(elemTy, ptr);
@@ -148,20 +162,21 @@ Value loadShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
     [&](OpBuilder& builder, Location loc) {
       Value initVal;
       if (elemTy.isF16()) {
-        initVal = f16_val(-100.0);
+        float fVal = getVal<float>(val);
+        initVal = f16_val(fVal);
+      } else if (elemTy.isInteger(32)) {
+        int ival = getVal<int>(val);
+        initVal = i32_val(ival);
+      } else if (elemTy.isInteger(64)) {
+        int64_t i64Val = getVal<int64_t>(val);
+        initVal = int_val(64, i64Val);
+      } else if (elemTy.isF64()) {
+        double dVal = getVal<double>(val);
+        initVal = f64_val(dVal);
+      } else {
+        float fVal = getVal<float>(val);
+        initVal = f32_val(fVal);
       }
-      else if (elemTy.isInteger(32)) {
-        initVal = i32_val(0);
-      }
-      else if (elemTy.isInteger(64)) {
-        initVal = int_val(64, 0);
-      }
-      else if (elemTy.isF64()) {
-        initVal = f64_val(0.0);
-      }else {
-        initVal = f32_val(-100.0);
-      }
-
       builder.create<mlir::scf::YieldOp>(loc, ValueRange({initVal}));
     });
   return loaded->getResult(0);

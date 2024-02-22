@@ -25,7 +25,7 @@ Value shflIdxSync(Location loc, ConversionPatternRewriter &rewriter, Value val,
 Value storeShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
                   Value val, Value pred);
 Value loadShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
-                 Type elemTy, Value pred);
+                 Type elemTy, Value pred, const std::string& val);
 
 
 } // namespace AMD
