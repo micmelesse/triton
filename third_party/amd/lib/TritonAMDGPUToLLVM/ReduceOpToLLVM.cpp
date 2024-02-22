@@ -14,6 +14,9 @@ using ::mlir::LLVM::linearize;
 using ::mlir::LLVM::AMD::shflSync;
 using ::mlir::triton::gpu::getOrder;
 using ::mlir::triton::gpu::getTotalElemsPerThread;
+using ::mlir::LLVM::AMD::loadShared;
+using ::mlir::LLVM::AMD::storeShared;
+
 
 namespace AMD {
 namespace {
@@ -512,7 +515,8 @@ private:
         auto elemTy = getElementType(op, i);
         Value writePtr = gep(ptr_ty(rewriter.getContext(), 3), elemTy,
                              smemBases[i], writeOffset);
-        store(acc[i], writePtr);
+        // store(acc[i], writePtr);
+        storeShared(rewriter, loc, writePtr, acc[i], laneZero);
       }
     }
   }
@@ -546,9 +550,11 @@ private:
       SmallVector<Value> acc(op.getNumOperands());
       for (unsigned i = 0; i < op.getNumOperands(); ++i) {
         auto elemTy = getElementType(op, i);
+        auto newTy = getTypeConverter()->convertType(elemTy);
         Value readPtr = gep(ptr_ty(rewriter.getContext(), 3), elemTy,
                             smemBases[i], readOffset);
-        acc[i] = load(elemTy, readPtr);
+        // acc[i] = load(elemTy, readPtr);
+        acc[i] = loadShared(rewriter, loc, readPtr, newTy, threadIsNeeded);
       }
       warpReduce(rewriter, loc, acc, op, sizeInterWarps, 1 /* interleave */);
       // only the first thread in each sizeInterWarps is writing

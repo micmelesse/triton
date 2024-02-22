@@ -122,6 +122,52 @@ Value shflIdxSync(Location loc, ConversionPatternRewriter &rewriter, Value val,
                         i32_val(0x1f));
 }
 
+Value storeShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
+                  Value val, Value pred) {
+  auto ty = val.getType();
+  auto val_ty = vec_ty(ty, 1);
+  Value vec_val = undef(val_ty);
+  vec_val = insert_element(val_ty, vec_val, val, i32_val(0));
+
+  auto vec_ty = vec_ty(i1_ty, 1);
+  Value vec_pred = undef(vec_ty);
+  vec_pred = insert_element(vec_ty, vec_pred, pred, i32_val(0));
+
+  rewriter.create<LLVM::MaskedStoreOp>(loc, vec_val, ptr, vec_pred, 4);
+  return val;
+}
+
+Value loadShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
+                 Type elemTy, Value pred) {
+  auto loaded = rewriter.create<scf::IfOp>(loc, pred,
+    [&](OpBuilder& builder, Location loc) {
+      auto loadVal = load(elemTy, ptr);
+      // auto loadVal = builder.create<LLVM::LoadOp>(loc, ptr);
+      builder.create<scf::YieldOp>(loc, ValueRange(loadVal));
+    },
+    [&](OpBuilder& builder, Location loc) {
+      Value initVal;
+      if (elemTy.isF16()) {
+        initVal = f16_val(-100.0);
+      }
+      else if (elemTy.isInteger(32)) {
+        initVal = i32_val(0);
+      }
+      else if (elemTy.isInteger(64)) {
+        initVal = int_val(64, 0);
+      }
+      else if (elemTy.isF64()) {
+        initVal = f64_val(0.0);
+      }else {
+        initVal = f32_val(-100.0);
+      }
+
+      builder.create<mlir::scf::YieldOp>(loc, ValueRange({initVal}));
+    });
+  return loaded->getResult(0);
+}
+
+
 } // namespace AMD
 
 } // namespace LLVM
