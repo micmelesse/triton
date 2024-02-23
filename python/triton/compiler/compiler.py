@@ -317,6 +317,19 @@ class CompiledKernel:
             self.name, self.kernel, self.metadata.shared, device)
 
     def __getattribute__(self, name):
+        # temp fixes
+        if name == "num_warps":
+            return self.metadata.num_warps
+
+        if name == "shared":
+            return self.metadata.shared
+
+        if name == "cluster_dims":
+            return self.metadata.cluster_dims
+        
+        if name == "num_ctas":
+            return self.metadata.num_ctas
+
         if name == 'run':
             self._init_handles()
         return super().__getattribute__(name)
