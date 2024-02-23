@@ -93,10 +93,17 @@ def generate_cu_signature(constants, signature, ids):
 
 
 def make_launcher(constants, signature, ids):
+    print("make_launcher")
+    print("constants:",constants)
+    print("signature:",signature)
+    print("ids:", ids)
     # Record the end of regular arguments;
     # subsequent arguments are architecture-specific descriptors, such as tensor descriptors for CUDA.
     signature, desc_start_idx = generate_cu_signature(constants, signature, ids)
     arg_decls = ', '.join(f"{ty_to_cpp(ty)} arg{i}" for i, ty in signature.items())
+
+    print("signature:",signature)
+    print("arg_decls:",arg_decls)
 
     def _extracted_type(ty):
         if ty[0] == '*':
@@ -329,6 +336,9 @@ PyMODINIT_FUNC PyInit___triton_launcher(void) {{
 class CudaLauncher(object):
 
     def __init__(self, src, metadata):
+        print("CudaLauncher.__init__" )
+        print("src:", src)
+        print("metadata:", metadata)
         ids = {
             "ids_of_tensormaps": metadata.ids_of_tensormaps,
             "ids_of_folded_args": metadata.ids_of_folded_args,
@@ -340,7 +350,14 @@ class CudaLauncher(object):
         mod = compile_module_from_src(src, "__triton_launcher")
         self.launch = mod.launch
 
+        print("src:", src)
+        print("mod:", mod)
+        print("constants:", constants)
+
     def __call__(self, *args, **kwargs):
+        print("CudaLauncher.__call__" )
+        print("args:", len(args), args)
+        print("kwargs:", len(kwargs), kwargs)
         self.launch(*args, **kwargs)
 
 

@@ -62,9 +62,17 @@ def ty_to_cpp(ty):
 
 
 def make_launcher(constants, signature, ids):
+    print("make_launcher")
+    print("constants:",constants)
+    print("signature:",signature)
+    print("ids:", ids)
+
     start_desc = len(signature)
     #signature = generate_cu_signature(constants, signature, ids)
     arg_decls = ', '.join(f"{ty_to_cpp(ty)} arg{i}" for i, ty in signature.items())
+
+    print("start_desc:",start_desc)
+    print("arg_decls:",arg_decls)
 
     def _extracted_type(ty):
         if ty[0] == '*':
@@ -123,7 +131,7 @@ static inline void gpuAssert(hipError_t code, const char *file, int line)
 #define HIP_CHECK(ans) {{ gpuAssert((ans), __FILE__, __LINE__); }}
 
 static void _launch(int gridX, int gridY, int gridZ, int num_warps, int num_ctas, int clusterDimX, int clusterDimY, int clusterDimZ, int shared_memory, hipStream_t stream, hipFunction_t function{', ' + arg_decls if len(arg_decls) > 0 else ''}) {{
-  // printf("_launch hip kernel\\n");
+  printf("_launch hip kernel\\n");
   void *params[] = {{ {', '.join(f"&arg{i}" for i in params)} }};
   if (gridX*gridY*gridZ > 0) {{
       HIP_CHECK(hipModuleLaunchKernel(function, gridX, gridY, gridZ, 64*num_warps, 1, 1, shared_memory, stream, params, 0));
@@ -177,7 +185,7 @@ static inline DevicePtrInfo getPointer(PyObject *obj, int idx) {{
 }}
 
 static PyObject* launch(PyObject* self, PyObject* args) {{
-   // printf("launch\\n");
+  printf("launch\\n");
   int gridX, gridY, gridZ;
   uint64_t _stream;
   uint64_t _function;
@@ -244,7 +252,11 @@ PyMODINIT_FUNC PyInit___triton_launcher(void) {{
 class HIPLauncher(object):
     
     def __init__(self, src, metadata):
+        print("HIPLauncher.__init__" )
+        print("src:", src)
+        print("metadata:", metadata)
         ids = {
+            # "ids_of_tensormaps": metadata.ids_of_tensormaps,
             "ids_of_folded_args": metadata.ids_of_folded_args,
             "ids_of_const_exprs": src.fn.constexprs if hasattr(src, "fn") else tuple()
         }
@@ -252,18 +264,27 @@ class HIPLauncher(object):
         src = make_launcher(constants, src.signature, ids)
         mod = compile_module_from_src(src, "__triton_launcher")
         self.launch = mod.launch
+
+        # print("src:", src)
+        print("mod:", mod)
+        # print("constants:", constants)
     
     def __call__(self, *args, **kwargs):
+        print("HIPLauncher.__call__" )
+        print("args:", len(args), args)
+        print("kwargs:", len(kwargs), kwargs)
+        # args=(1,1,1,1) + args
         self.launch(*args, **kwargs)
 
 
 class HIPDriver(GPUDriver):
 
     def __init__(self):
-        super().__init__()
+       
         self.utils = HIPUtils()
         self.binary_ext = "hsaco"
         self.launcher_cls = HIPLauncher
+        super().__init__()
 
     @staticmethod
     def is_active():

@@ -96,6 +96,11 @@ def _get_num_warps_from_ir_str(src: str):
 class ASTSource:
 
     def __init__(self, fn, signature, constants=None, attrs=None) -> None:
+        print("ASTSource.__init__")
+        print("fn: ", fn)
+        print("signature: ", signature)
+        print("constants: ", constants)
+        print("attrs: ", attrs)
         self.fn = fn
         self.ext = "ttir"
         self.name = fn.__name__
@@ -200,8 +205,13 @@ def parse(full_name, ext):
 
 
 def compile(src, target=None, options=None):
+    print("compile")
+    print("src: ", src)
+    print("target: ", target)
+    print("options: ", options)
     if target is None:
         target = driver.active.get_current_target()
+    print("target: ", target)
     backend = make_backend(target)
     # create backend
     if not isinstance(src, ASTSource):
@@ -209,6 +219,7 @@ def compile(src, target=None, options=None):
         src = IRSource(src)
     extra_options = src.parse_options()
     options = backend.parse_options(dict(options or dict(), **extra_options))
+    print("options: ", options)
     # create cache manager
     key = f"{triton_key()}-{src.hash()}-{backend.hash()}-{options.hash()}-{str(sorted(get_env_vars().items()))}"
     hash = hashlib.md5(key.encode("utf-8")).hexdigest()
@@ -222,7 +233,7 @@ def compile(src, target=None, options=None):
     metadata_filename = f"{src.name}.json"
     metadata_group = fn_cache_manager.get_group(metadata_filename) or {}
     metadata_path = metadata_group.get(metadata_filename)
-    if metadata_path is not None:
+    if False and metadata_path is not None:
         # cache hit!
         metadata = json.loads(Path(metadata_path).read_text())
         return CompiledKernel(src, metadata_group)
@@ -234,6 +245,7 @@ def compile(src, target=None, options=None):
         **get_env_vars(),
         **src.metadata(),
     }
+    print_metadata(metadata)
     # run compilation pipeline  and populate metadata
     stages = dict()
     backend.add_stages(stages, options)
@@ -268,6 +280,10 @@ def make_backend(target):
             f"{len(actives)} compatible backends for target ({target[0]}) ({actives}). There should only be one.")
     return actives[0](target)
 
+def print_metadata(metadata):
+    print("metadata:")
+    for k,v in metadata.items():
+        print(f"\t{k}: {v}")
 
 class CompiledKernel:
 
@@ -277,6 +293,9 @@ class CompiledKernel:
     launch_exit_hook = None
 
     def __init__(self, src, metadata_group):
+        print("CompiledKernel.__init__")
+        print("src:", src)
+        print("metadata_group:", metadata_group)
         from collections import namedtuple
         metadata_path = next((Path(p) for c, p in metadata_group.items() if c.endswith(".json")))
         self.metadata = json.loads(metadata_path.read_text())
@@ -286,6 +305,7 @@ class CompiledKernel:
             self.metadata["tensormaps_info"][i].ids_of_folded_args = tuple(self.metadata["ids_of_folded_args"])
         self.metadata["tensormaps_info"] = tuple(self.metadata["tensormaps_info"])
         KernelMetadata = namedtuple('KernelMetadata', sorted(list(self.metadata.keys())))
+        print_metadata(self.metadata)
         self.metadata = KernelMetadata(**self.metadata)
 
         self.name = self.metadata.name
@@ -305,6 +325,7 @@ class CompiledKernel:
         self.function = None
 
     def _init_handles(self):
+        print("CompiledKernel._init_handles")
         if self.module is not None:
             return
         device = driver.active.get_current_device()
@@ -313,18 +334,42 @@ class CompiledKernel:
         if self.metadata.shared > max_shared:
             raise OutOfResources(self.metadata.shared, max_shared, "shared memory")
         # TODO: n_regs, n_spills should be metadata generated when calling `ptxas`
+        # print("self.name:", self.name)
+        # print("self.kernel:", self.kernel)
+        # print("self.metadata.shared:", self.metadata.shared)
+        # print("device:", device)
         self.module, self.function, self.n_regs, self.n_spills = driver.active.utils.load_binary(
             self.name, self.kernel, self.metadata.shared, device)
+        # print("self.module:", self.module)
+        # print("self.function:", self.function)
+        # print("self.n_regs:", self.n_regs)
+        # print("self.n_spills:", self.n_spills)
 
     def __getattribute__(self, name):
-        if name == 'run':
+        print("CompiledKernel.__getattribute__:", name)
+        # temp fixes
+        if name == "num_warps":
+            return self.metadata.num_warps
+
+        if name == "shared":
+            return self.metadata.shared
+
+        if name == "cluster_dims":
+            return self.metadata.cluster_dims
+        
+        if name == "num_ctas":
+            return self.metadata.num_ctas
+
+        if name == 'run': # this is followed by self.run which is HIPLauncher.__call__
             self._init_handles()
         return super().__getattribute__(name)
 
     def __getitem__(self, grid):
+        print("CompiledKernel.__getitem__:", grid)
         self._init_handles()
 
         def runner(*args, stream=None):
+            print("runner")
             if stream is None:
                 device = driver.active.get_current_device()
                 stream = driver.active.get_current_stream(device)

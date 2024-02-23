@@ -18,6 +18,7 @@ class DriverBase(metaclass=ABCMeta):
 class GPUDriver(DriverBase):
 
     def __init__(self):
+        print("GPUDriver.__init__")
         # TODO: support other frameworks than torch
         import torch
         self.get_device_capability = torch.cuda.get_device_capability
