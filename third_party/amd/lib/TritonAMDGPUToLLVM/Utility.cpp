@@ -148,7 +148,7 @@ T getVal(const std::string& val) {
   } else if (val == "one") {
     return T(1);
   }
-  return T(0);
+  return T(110);
 }
 
 Value loadShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
@@ -156,7 +156,6 @@ Value loadShared(ConversionPatternRewriter &rewriter, Location loc, Value ptr,
   auto loaded = rewriter.create<scf::IfOp>(loc, pred,
     [&](OpBuilder& builder, Location loc) {
       auto loadVal = load(elemTy, ptr);
-      // auto loadVal = builder.create<LLVM::LoadOp>(loc, ptr);
       builder.create<scf::YieldOp>(loc, ValueRange(loadVal));
     },
     [&](OpBuilder& builder, Location loc) {

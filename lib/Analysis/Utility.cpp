@@ -218,15 +218,23 @@ bool ReduceOpHelper::isSupportedLayout() {
 }
 
 std::string ReduceOpHelper::getLoadDefaultValue() {
-    if (isa<arith::AddIOp>(op) or isa<arith::OrIOp>(op) or isa<arith::XOrIOp>(op))
-      return "zero";
-    else if (isa<arith::AndIOp>(op))
-      return "one";
-    else if (isa<arith::MinSIOp>(op) or isa<arith::MinUIOp>(op))
-      return "max";
-    else if (isa<arith::MaxSIOp>(op) or isa<arith::MaxUIOp>(op))
-      return "min";
+  Block *block = &(*op.getCombineOp().begin());
+  Operation *yield = block->getTerminator();
+  Operation *rOp = yield->getOperand(0).getDefiningOp();
+  if (!rOp || rOp->getNumOperands() != 2 ||
+      rOp->getNumResults() != 1)
+    return "zero";
+
+  if (isa<arith::AddIOp>(rOp) or isa<arith::OrIOp>(rOp) or isa<arith::XOrIOp>(rOp))
+    return "zero";
+  else if (isa<arith::AndIOp>(rOp))
+    return "one";
+  else if (isa<arith::MinSIOp>(rOp) or isa<arith::MinUIOp>(rOp))
     return "max";
+  else if (isa<arith::MaxSIOp>(rOp) or isa<arith::MaxUIOp>(rOp))
+    return "min";
+  llvm::outs() << "not anyone\n";
+  return "zero";
 }
 
 unsigned ScanLoweringHelper::getAxisNumElementsPerThread() {
