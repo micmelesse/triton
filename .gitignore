@@ -53,3 +53,9 @@ docs/getting-started/tutorials
 
 # Vim
 *.swp
+
+
+# AMD
+log*
+scripts
+core
