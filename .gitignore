@@ -53,3 +53,11 @@ docs/getting-started/tutorials
 
 # Vim
 *.swp
+
+
+# AMD
+scripts
+log*
+*.html
+*.csv
+*.png
