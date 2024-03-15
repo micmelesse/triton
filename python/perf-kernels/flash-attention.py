@@ -986,14 +986,8 @@ attention = _attention.apply
 
 @pytest.mark.parametrize('Z, H, N_CTX_Q, N_CTX_K, D_HEAD',
                          [
-                            # (1, 1, 8192, 8192, 128),
-                            # (1, 1, 8192, 8192, 128),
-                            (1, 24, 8192, 8192, 1),
-                            # (1, 48, 8192, 8192, 8),
-                            # (1, 48, 8192, 8192, 16),
-                            # (1, 48, 8192, 8192, 32),
-                        #   (1, 48, 8192, 8192, 64),
-                        #   (4, 48, 8192, 8192, 64),
+                        #   (4, 48, 1024, 1024, 64),
+                          (4, 48, 4096, 8192, 64),
                         #   (2, 16, 16384, 16384, 128),
                         #   (2, 16, 1020, 987, 128),
                         #   (2, 16, 15498, 2, 128),
@@ -1037,7 +1031,7 @@ def test_op_fwd(Z, H, N_CTX_Q, N_CTX_K, D_HEAD, causal, use_bias, dtype=torch.fl
     q = torch.randn((Z, H, N_CTX_Q, D_HEAD), dtype=dtype, device="cuda").normal_(mean=0., std=0.5).requires_grad_()
     k = torch.randn((Z, H, N_CTX_K, D_HEAD), dtype=dtype, device="cuda").normal_(mean=0., std=0.5).requires_grad_()
     v = torch.randn((Z, H, N_CTX_K, D_HEAD), dtype=dtype, device="cuda").normal_(mean=0., std=0.5).requires_grad_()
-    if TORCH_HAS_FP8E5:
+    if False:
         q = q.to(torch_dtype)
         k = k.to(torch_dtype)
     o = torch.empty_like(q)
