@@ -168,8 +168,13 @@ def _attn_fwd_inner(
     RETURN_ENCODED_SOFTMAX: tl.constexpr,
     PADDED_HEAD: tl.constexpr
 ):
+    # if ((tl.program_id(0)==0 and tl.program_id(1)==0) and tl.program_id(2)==0):
+    #     tl.device_print("BLOCK_N", BLOCK_N)
+
     # loop over k, v, and update accumulator
     for start_n in range (block_min, block_max, BLOCK_N):
+        # if ((tl.program_id(0)==0 and tl.program_id(1)==0) and tl.program_id(2)==0):
+        #     tl.device_print("start_n", start_n)
         # For padded blocks, we will overrun the tensor size if
         # we load all BLOCK_N. For others, the blocks are all within range.
         k = load_fn(K_block_ptr, PADDED_HEAD, MASK_STEPS and (n_extra_tokens != 0), "zero")
@@ -236,8 +241,9 @@ def _attn_fwd_inner(
 
 @triton.autotune(
    configs=[
+    triton.Config({'BLOCK_M': 128, 'BLOCK_N': 32, 'PRE_LOAD_V': False}, num_stages=4, num_warps=8), # H100 eq config
     #    triton.Config({'BLOCK_M': 256, 'BLOCK_N': 64, 'waves_per_eu': 2, 'PRE_LOAD_V': False}, num_stages=1, num_warps=8),
-       triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'PRE_LOAD_V': False}, num_stages=1, num_warps=4),
+    #    triton.Config({'BLOCK_M': 128, 'BLOCK_N': 128, 'waves_per_eu': 2, 'PRE_LOAD_V': False}, num_stages=1, num_warps=4),
     #    triton.Config({'BLOCK_M': 256, 'BLOCK_N': 128, 'waves_per_eu': 2, 'PRE_LOAD_V': False}, num_stages=1, num_warps=8),
     #    triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'waves_per_eu': 3, 'PRE_LOAD_V': True}, num_stages=1, num_warps=4),
     #    triton.Config({'BLOCK_M': 128, 'BLOCK_N': 64, 'waves_per_eu': 3, 'PRE_LOAD_V': False}, num_stages=1, num_warps=4),
@@ -269,6 +275,9 @@ def attn_fwd(
     BIAS_TYPE: tl.constexpr,
     ENABLE_DROPOUT: tl.constexpr, RETURN_ENCODED_SOFTMAX: tl.constexpr
 ):
+
+    # return # debug the empty kernel. uncomment this and comment out everything else
+
     start_m = tl.program_id(0)
     off_h_q = tl.program_id(1)
     off_z = tl.program_id(2)
