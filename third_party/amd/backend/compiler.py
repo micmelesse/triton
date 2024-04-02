@@ -115,13 +115,13 @@ class HIPBackend(BaseBackend):
 
     @staticmethod
     def make_ttgir(mod, metadata, opt):
+        # TTIR -> TTGIR
         pm = ir.pass_manager(mod.context)
         pm.enable_debug()
         # TODO: capability
         passes.ttir.add_convert_to_ttgpuir(pm, opt.num_warps, opt.warp_size, opt.num_ctas, 90)
-        pm.run(mod)
-        pm = ir.pass_manager(mod.context)
-        pm.enable_debug()
+
+        # optimize TTGIR
         passes.ttgpuir.add_coalesce(pm)
         amd.passes.ttgpuir.add_remove_layout_conversions(pm)
         passes.ttgpuir.add_optimize_thread_locality(pm)
@@ -151,18 +151,10 @@ class HIPBackend(BaseBackend):
         amd.passes.ttgpuir.add_decompose_unsupported_conversions(pm)
         passes.convert.add_scf_to_cf(pm)
         passes.convert.add_index_to_llvmir(pm)
-        pm.run(mod)
-
-        pm = ir.pass_manager(mod.context)
-        pm.enable_debug()
         passes.ttgpuir.add_allocate_shared_memory(pm)
         amd.passes.ttgpuir.add_to_llvmir(pm)
         passes.common.add_canonicalizer(pm)
         passes.common.add_cse(pm)
-        pm.run(mod)
-
-        pm = ir.pass_manager(mod.context)
-        pm.enable_debug()
         passes.convert.add_scf_to_cf(pm)
         passes.convert.add_cf_to_llvmir(pm)
         passes.convert.add_arith_to_llvmir(pm)
