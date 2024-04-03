@@ -53,3 +53,7 @@ docs/getting-started/tutorials
 
 # Vim
 *.swp
+
+
+log*
+scripts
