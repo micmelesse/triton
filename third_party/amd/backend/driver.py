@@ -278,6 +278,9 @@ class HIPLauncher(object):
         self.launch = mod.launch
 
     def __call__(self, *args, **kwargs):
+        print("HIPLauncher.__call__")
+        print("args: ", args)
+        print("kwargs: ", kwargs)
         self.launch(*args, **kwargs)
 
 
