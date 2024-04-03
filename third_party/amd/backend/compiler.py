@@ -71,6 +71,7 @@ class HIPBackend(BaseBackend):
         return target[0] == 'hip'
 
     def __init__(self, target: list) -> None:
+        target = list(target)
         super().__init__(target)
         assert isinstance(target, list) and len(target) == 3
         assert isinstance(target[1], str)
