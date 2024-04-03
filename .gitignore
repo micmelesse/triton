@@ -57,5 +57,5 @@ docs/sg_execution_times.rst
 *.swp
 
 # log
-log
+log*
 scripts
