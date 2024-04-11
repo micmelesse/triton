@@ -55,3 +55,7 @@ docs/sg_execution_times.rst
 
 # Vim
 *.swp
+
+
+scripts
+log

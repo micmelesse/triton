@@ -5,9 +5,14 @@ import sys
 from contextlib import contextmanager
 from typing import Any, Dict, List
 from . import language as tl
+from . import runtime
 
+def is_hip():
+    return runtime.driver.active.get_current_target()[0] == "hip"
 
 def nvsmi(attrs):
+    if is_hip():
+        return rocmsmi(attrs)
     attrs = ','.join(attrs)
     cmd = ['nvidia-smi', '-i', '0', '--query-gpu=' + attrs, '--format=csv,noheader,nounits']
     out = subprocess.check_output(cmd)
@@ -15,6 +20,14 @@ def nvsmi(attrs):
     ret = [int(x) for x in ret]
     return ret
 
+def rocmsmi(attrs):
+    ret = []
+    for attr in attrs:
+        if attr == "clocks.max.sm":
+            ret.append(1)
+        else:
+            ret.append(1)
+    return ret
 
 def do_bench_cudagraph(fn, rep=20, grad_to_none=None, return_mode="mean"):
     """
